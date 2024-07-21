@@ -2,7 +2,6 @@ beautifulsoup4==4.11.1
 coqui_tts
 librosa==0.10.2.post1
 noisereduce==3.0.2
-Pillow==10.1.0
 Pillow==10.4.0
 pyaudio==0.2.14
 PyAutoGUI==0.9.53
