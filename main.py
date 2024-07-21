@@ -17,6 +17,12 @@ import re
 import random
 from collections import Counter
 from config.config import *
+from TTS.api import TTS
+import torch
+
+# Disable cuDNN autotuner
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True
 
 # Vision model: florence-2-large-ft
 vision_model = AutoModelForCausalLM.from_pretrained("microsoft/Florence-2-large-ft", trust_remote_code=True)
@@ -26,12 +32,15 @@ vision_model.to('cuda')
 # Load Whisper Model
 model = whisper.load_model("base")
 
-# run_voice_response
+# Load XTTS_v2
+tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to('cuda')
+
+'''# run_voice_response
 def run_voice_response():
-    subprocess.run(["python", "TTS\\voice_response.py"])
+    subprocess.run(["python", "voice_response.py"])'''
 
 # Start the voice_response and image view scripts in two separate threads
-threading.Thread(target=run_voice_response).start()
+#threading.Thread(target=run_voice_response).start()
 
 # Queue agent responses
 def queue_agent_responses(agent, user_voice_output, screenshot_description, audio_transcript_output):
@@ -103,7 +112,62 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
     # Add agent's response to chat history (messages) and message_dump.
     messages.append({"role": "assistant", "content": generated_text_fixed})
     message_dump[0][agent.agent_name] = generated_text_split
+
+# Controls the flow of the agent voice output generation and playback.
+# Needs to be done asynchronously in order to check if each agents' directories are empty in real-time.
+def voice_output_async():
+    while True:
+        for agent in agent_config:
+            play_voice_output(agent)
+
+def play_voice_output(agent):
     
+    output_dir = agent["output_dir"]
+
+    while len(os.listdir(output_dir)) > 0:
+        
+        can_speak_event.clear()
+        
+        file_path = os.path.join(output_dir, os.listdir(output_dir)[0])
+        try:
+            wave_obj = sa.WaveObject.from_wave_file(file_path)
+            play_obj = wave_obj.play()
+            play_obj.wait_done()
+            os.remove(file_path)
+
+            # Check if both agent directories are empty
+            if (len(os.listdir(agent_config[0]["output_dir"])) == 0 and len(os.listdir(agent_config[1]["output_dir"])) == 0):
+                can_speak_event.set()
+                break
+        except Exception as e:
+            print(f"ERROR: {e}")
+            return False
+    return True
+
+
+def generate_voice_outputs():
+    print("Starting to generate voice outputs...")
+    for agent in agent_config:
+        print(f"Processing agent: {agent['name']}")
+        for i, sentence in enumerate(agent['dialogue_list']):
+            voice_dir = os.path.join(agent['output_dir'], f"{i}.wav")
+            try:
+                # Generate TTS to file
+                print(f"Generating TTS for sentence: {sentence}")
+                tts.tts_to_file(text=sentence, speaker_wav=agent['speaker_wav'], file_path=voice_dir, language="en")
+            except Exception as e:
+                print(f"Error occurred while generating voice output for {agent['name']}: {e}")
+        
+        # Clear dialogue list after processing
+        agent['dialogue_list'].clear()
+    
+    print("Finished generating voice outputs.")
+
+    # Ensure agents' dialogue lists are cleared after generating outputs
+    for agent in agents:
+        agent.dialogue_list.clear()
+
+                
 
 # Setup channel info
 FORMAT = pyaudio.paInt16  # data type format
@@ -182,11 +246,29 @@ top_k=2000
 sentence_length = 2 # Truncates the message to 2 sentences per response
 message_length = 45 # Deprecated
 
+# Agent configurations
+agent_config = [
+    {
+        "name": "axiom",
+        "dialogue_list": [],
+        "speaker_wav": r"agent_voice_samples\axiom_voice_sample.wav",
+        "output_dir": r"agent_voice_outputs\axiom",
+        "active": True
+    },
+    {
+        "name": "axis",
+        "dialogue_list": [],
+        "speaker_wav": r"agent_voice_samples\axis_voice_sample.wav",
+        "output_dir": r"agent_voice_outputs\axis",
+        "active": True
+    }
+]
+
 # Build the agents
 dialogue_dir_axiom = r"dialogue_text_axiom.txt"
 dialogue_dir_axis = r"dialogue_text_axis.txt"
-axiom = Agent("axiom", "Male", agents_personality_traits['axiom'], system_prompt_axiom1, system_prompt_axiom2, dialogue_dir_axiom)
-axis = Agent("axis", "Female", agents_personality_traits['axis'], system_prompt_axis1, system_prompt_axis2, dialogue_dir_axis)
+axiom = Agent("axiom", "Male", agents_personality_traits['axiom'], system_prompt_axiom1, system_prompt_axiom2, agent_config[0]['dialogue_list'])
+axis = Agent("axis", "Female", agents_personality_traits['axis'], system_prompt_axis1, system_prompt_axis2, agent_config[1]['dialogue_list'])
 vectorAgent = VectorAgent()
 agents = [axiom, axis]
 
@@ -206,26 +288,31 @@ summaries = []
 # Audio file list
 audio_file_list = [WAVE_OUTPUT_FILENAME, 'audio_transcript_output.wav']
 
-# Initialize, Clear any pre-existing dialogue and enable the user to speak.
-with open(dialogue_dir_axiom, 'w', encoding='utf-8') as f:
-    f.write("")
+# Prepare voice output directories.
+for agent in agent_config:
+    output_dir = agent["output_dir"]
+    for file in os.listdir(output_dir):
+        file_path = os.path.join(output_dir, file)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
 
-with open(dialogue_dir_axis, 'w', encoding='utf-8') as f:
-    f.write("")
+sentences = [] # Split up text into sentences, allowing the script to generate voice output separately
 
-with open(r"can_speak.txt", 'w', encoding='utf-8') as f:
-    f.write("True")
+threading.Thread(target=voice_output_async).start() # Start checking for voice outputs
+
+can_speak = True
+
+can_speak_event.set()
     
 #---------------------MAIN LOOP----------------------#
     
 while True:
 
     # Check if an agent is responding.
-    with open(r"can_speak.txt", 'r', encoding='utf-8') as f:
-        if f.read().strip() != "True":
-            print("Waiting for response to complete...")
-            time.sleep(1)
-            continue
+    if not can_speak_event.is_set():
+        print("Waiting for response to complete...")
+        time.sleep(1)
+        continue
 
     # Remove pre-existing screenshot inputs
     with open('screenshot_description.txt', 'w', encoding='utf-8') as f:
@@ -236,6 +323,8 @@ while True:
 
     # Listen to microphone input from user before continuing loop
     record_voice = record_audio(audio, "voice_recording.wav", FORMAT, RATE, CHANNELS, CHUNK, RECORD_SECONDS, THRESHOLD, SILENCE_LIMIT, vision_model, processor)
+
+    time.sleep(0.25)
 
     # Read screenshots description
     with open("screenshot_description.txt", 'r', encoding='utf-8') as f:
@@ -255,15 +344,9 @@ while True:
         print("No user voice output transcribed")
         user_voice_output = ""
 
-    # Check if agents' text directories are empty (no pending sentences to generate) before generating agent response.
-    # Otherwise skip this entire sequence.
-    with open(dialogue_dir_axiom, 'r', encoding='utf-8') as f:
-        dialogue_axiom_text = f.read()
+    # Check if agents' dialogue lists and voice directories are empty before generating text.
 
-    with open(dialogue_dir_axis, 'r', encoding='utf-8') as f:
-        dialogue_axis_text = f.read()
-
-    if (dialogue_axiom_text == "" and dialogue_axis_text == "") and len(os.listdir(r"TTS\agent_voice_outputs\axiom")) == 0 and len(os.listdir(r"TTS\agent_voice_outputs\axis")) == 0:
+    if not can_speak_event.is_set():
 
         # Activate agents
         
@@ -282,10 +365,11 @@ while True:
         for thread in threads:
             thread.join()
 
+        # Add agent's response to the dialogue list
         for agent in agents:
-            # Add agent's response to text file so a voice response can be generated.
-            with open(agent.dialogue_dir, 'w', encoding='utf-8') as f:
-                f.write('\n'.join(message_dump[0][agent.agent_name]))
+            agent.dialogue_list.extend(message_dump[0][agent.agent_name])
+
+        generate_voice_outputs()
 
     else:
         print("Dialogue in progress...")
