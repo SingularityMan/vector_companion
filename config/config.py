@@ -34,19 +34,23 @@ can_speak_path = os.path.join(config_dir, '..', 'can_speak.txt')
 dialogue_axiom_path = os.path.join(config_dir, '..',  'dialogue_text_axiom.txt')
 dialogue_axis_path = os.path.join(config_dir, '..',  'dialogue_text_axis.txt')
 
+can_speak = True
+can_speak_event = threading.Event()
+can_speak_event.set()
+
 #------------------------------------------TEXT PROCESSING-----------------------------------------------------------#
 
 class Agent():
 
-    def __init__(self, agent_name, agent_gender, personality_traits, system_prompt1, system_prompt2, dialogue_dir):
+    def __init__(self, agent_name, agent_gender, personality_traits, system_prompt1, system_prompt2, dialogue_list):
         self.agent_name = agent_name
         self.agent_gender = agent_gender
         self.system_prompt1 = system_prompt1
         self.system_prompt2 = system_prompt2
-        self.dialogue_dir = dialogue_dir
         self.previous_agent_message = ""
         self.personality_traits = personality_traits
         self.trait_set = []
+        self.dialogue_list = dialogue_list
 
     def summarize_conversation(self, messages, agent_messages):
         url = "http://localhost:11434/api/chat"
@@ -264,7 +268,7 @@ def check_sentence_length(text, message_length=45, sentence_length=2):
 
     # Split sentences, but ignore ellipsis
     sentences = re.split(r'(?:(?<=[.?;]))\s', text.strip())
-    print("Sentences: ", sentences)
+    #print("Sentences: ", sentences)
     if sentences:
         if len(sentences) >= sentence_length:
             print("Sentence 1 length: ", len(sentences[0]))
@@ -383,6 +387,7 @@ def view_image_ocr(vision_model, processor):
 def record_audio(audio, WAVE_OUTPUT_FILENAME, FORMAT, RATE, CHANNELS, CHUNK, RECORD_SECONDS, THRESHOLD, SILENCE_LIMIT, vision_model, processor):
 
     global image_lock
+    global can_speak
     
     ii = 0
     
@@ -390,11 +395,10 @@ def record_audio(audio, WAVE_OUTPUT_FILENAME, FORMAT, RATE, CHANNELS, CHUNK, REC
         while True:
 
             # Cancel recording if Agent speaking
-            with open(can_speak_path, 'r', encoding='utf-8') as f:
-                    if f.read().strip() != "True":
-                        time.sleep(1)
-                        print("Waiting for response to complete...")
-                        continue
+            if not can_speak_event.is_set():
+                time.sleep(1)
+                print("[record_user_mic] Waiting for response to complete...")
+                continue
             
             # Start Recording
             stream = audio.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, input_device_index=1, frames_per_buffer=CHUNK)
@@ -407,13 +411,13 @@ def record_audio(audio, WAVE_OUTPUT_FILENAME, FORMAT, RATE, CHANNELS, CHUNK, REC
             recording_started = False
 
             while True:
-                with open(can_speak_path, 'r', encoding='utf-8') as f:
-                    if f.read().strip() != "True":
-                        print("Cancelling recording, agent is speaking.")
-                        stream.stop_stream()
-                        stream.close()
-                        time.sleep(0.25)
-                        return False
+                
+                if not can_speak_event.is_set():
+                    print("Cancelling recording, agent is speaking.")
+                    stream.stop_stream()
+                    stream.close()
+                    time.sleep(0.25)
+                    return False
 
                 try:
                     data = stream.read(CHUNK, exception_on_overflow=False)
@@ -452,20 +456,13 @@ def record_audio(audio, WAVE_OUTPUT_FILENAME, FORMAT, RATE, CHANNELS, CHUNK, REC
                         silence_start = time.time()
                     elif time.time() - silence_start > SILENCE_LIMIT:
                         print("finished recording")
-                        with open(can_speak_path, 'w', encoding='utf-8') as f:
-                            f.write("False")
+                        can_speak_event.clear()
                         break
                 else:
                     pass
                     #print(f"rms: {rms}, threshold: {THRESHOLD}")
 
-            with open(dialogue_axiom_path, 'r', encoding='utf-8') as f:
-                dialogue_axiom = f.read()
-
-            with open(dialogue_axis_path, 'r', encoding='utf-8') as f:
-                dialogue_axis = f.read()
-
-            if (dialogue_axiom == "" and dialogue_axis == "") and (len(os.listdir(r"C:\Users\carlo\PycharmProjects\vision_test2\MiniCPM-V\TTS\agent_voice_outputs\axiom")) == 0 and len(os.listdir(r"C:\Users\carlo\PycharmProjects\vision_test2\MiniCPM-V\TTS\agent_voice_outputs\axis")) == 0):
+            if not can_speak_event.is_set():
 
                 # Stop Recording
                 stream.stop_stream()
@@ -487,7 +484,15 @@ def record_audio(audio, WAVE_OUTPUT_FILENAME, FORMAT, RATE, CHANNELS, CHUNK, REC
 
 def record_audio_output(audio, WAVE_OUTPUT_FILENAME, FORMAT, CHANNELS, RATE, CHUNK, RECORD_SECONDS):
 
+    global can_speak
+
     while True:
+
+        # Check if an agent is responding.
+        if not can_speak_event.is_set():
+            print("[record_audio_output] Waiting for response to complete...")
+            time.sleep(1)
+            continue
 
         # Create a PyAudio instance
         p = pyaudio.PyAudio()
@@ -524,26 +529,17 @@ def record_audio_output(audio, WAVE_OUTPUT_FILENAME, FORMAT, CHANNELS, RATE, CHU
 
             #print("FRAMES DIALOGUE OUTPUT:"+str(i)+"/"+str(int(RATE / CHUNK * RECORD_SECONDS)))
 
-            with open(can_speak_path, 'r', encoding='utf-8') as f:
-                if f.read() != "True":
-                    print("Recording terminated early. Agent is speaking.")
-                    time.sleep(1)
-                    break
+            if not can_speak_event.is_set():
+                time.sleep(1)
+                break
                     
             data = stream.read(CHUNK, exception_on_overflow=True)
             frames.append(data)
 
         print("* done recording Audio Transcript")
-        with open(can_speak_path, 'w', encoding='utf-8') as f:
-            f.write("False")
-
-        with open(dialogue_axiom_path, 'r', encoding='utf-8') as f:
-            dialogue_axiom = f.read()
-
-        with open(dialogue_axis_path, 'r', encoding='utf-8') as f:
-            dialogue_axis = f.read()
-
-        if (dialogue_axiom == "" and dialogue_axis == ""):
+        can_speak = False
+        
+        if not can_speak_event.is_set():
 
             # Stop the stream
             stream.stop_stream()

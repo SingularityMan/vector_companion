@@ -15,7 +15,7 @@ processor = AutoProcessor.from_pretrained("microsoft/Florence-2-large-ft", trust
 prompt = "<OCR>"
 
 # Load the image
-picture = "florence_screenshot.png"
+picture = "axiom_screenshot.png"
 image = Image.open(picture)
 
 # Preprocess the inputs

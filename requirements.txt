@@ -32,3 +32,4 @@ accelerate==0.30.1
 socksio==1.0.0
 gradio
 gradio_client==0.16.4
+whisper
