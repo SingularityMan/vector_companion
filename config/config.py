@@ -61,12 +61,12 @@ class Agent():
         summary_prompt = "Provide an expository summary of this conversation in list format, highlighting the most significant events that occurred while being as objective as possible:\n\n" + "\n".join(agent_messages[-8000:])
 
         summary_payload = {
-            "model": "llama3:8b-instruct-q4_0",
+            "model": "llama3.1:8b-instruct-fp16",
             "messages": [{"role": "system", "content": "Summarize the conversation in list format."}, {"role": "user", "content": summary_prompt}],
             "stream": False,
             "options": {
                 "repeat_penalty": 1.15,
-                "num_ctx": 8000
+                "num_ctx": 32000
             }
         }
 
@@ -92,7 +92,7 @@ class Agent():
             "Content-Type": "application/json"
         }
 
-        if len(messages) > 50:
+        if len(messages) > 100:
             messages = [{"role": "system", "content": system_prompt}]
             agent_messages, conversation_summary = self.summarize_conversation(messages, agent_messages)
             messages.append({"role": "user", "content": conversation_summary})
@@ -105,15 +105,15 @@ class Agent():
 
         # Define the payload
         payload = {
-            "model": "llama3:8b-instruct-fp16",
+            "model": "llama3.1:8b-instruct-fp16",
             "messages": messages,
             "stream": False,
             "options":{
                 "repeat_penalty": 1.40,
-                #"temperature": temperature,
+                #"temperature": 1,
                 #"top_p": top_p,
                 #"top_k": top_k,
-                "num_ctx": 8000
+                "num_ctx": 32000
                 #"stop": []
                 }
         }
@@ -205,7 +205,7 @@ class VectorAgent():
 
         # Define the payload
         payload = {
-            "model": "llama3:8b-instruct-fp16",
+            "model": "llama3.1:8b-instruct-fp16",
             "messages": agent_messages,
             "stream": False,
             "options":{
@@ -213,7 +213,7 @@ class VectorAgent():
                 #"temperature": temperature,
                 #"top_p": top_p,
                 #"top_k": top_k,
-                "num_ctx": 8000
+                "num_ctx": 32000
                 #"num_predict": 250,
                 #"stop": []
                 }

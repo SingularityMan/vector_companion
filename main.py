@@ -232,8 +232,9 @@ agents_personality_traits = {
         ["witty", ["clever", "sharp", "quick-witted", "humorous", "playful", "smart", "amusing", "relatable", "teasing"]]
     ],
     "axis": [
-        ["intuitive", ["passive-aggressive", "condescending", "snarky", "taunting", "derisive", "mischievous"]],
-        ["satirical", ["mocking", "acerbic", "sarcastic", "dry", "disdainful"]],
+        ["intuitive", ["snarky", "taunting", "mischievous", "entertaining"]],
+        ["satirical", ["mocking", "sadistic", "sarcastic", "sharp-witted", "scintillating"]],
+        ["witty", ["witty", "seductive", "charming", "sociable", "comical", "jocular", "ingenius"]]
     ]
 }
 
