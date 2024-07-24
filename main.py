@@ -19,6 +19,10 @@ from collections import Counter
 from config.config import *
 from TTS.api import TTS
 import torch
+from pydub import AudioSegment
+from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+from ctypes import cast, POINTER
+from comtypes import CLSCTX_ALL, CoInitialize, CoUninitialize
 
 # Disable cuDNN autotuner
 torch.backends.cudnn.benchmark = False
@@ -30,7 +34,7 @@ processor = AutoProcessor.from_pretrained("microsoft/Florence-2-large-ft", trust
 vision_model.to('cuda')
 
 # Load Whisper Model
-model = whisper.load_model("base")
+model = whisper.load_model("small")
 
 # Load XTTS_v2
 tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to('cuda')
@@ -69,15 +73,11 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
         messages,
         agent_messages,
         agent.system_prompt1,
-    "   - **Instructions to Follow:\n**"
-    "   - \nYou must remain in character as "+agent.agent_name+". You have the following personality traits and must respon accordingly: "+agent.trait_set+
-    "   - \n\n**Instructions:**\n\n"+additional_conversation_instructions +
-    "   - \n\nDo not mention the contextual information provided."
-    "   - \nDo not mention any actions taken ('Here's my response: <action taken>', 'I will respond as XYZ agent', etc."
+    "   - \nYou must remain in character as "+agent.agent_name+". You have the following personality traits and must respond accordingly: "+agent.trait_set+
+    "   - \n\n**Instructions:**\n\n"+ additional_conversation_instructions +
+    "   - \nDo not mention any actions taken ('Here's my response: <action taken>', 'I will respond as XYZ agent', 'I say with a smirk', etc.)"
     "   - \nFollow all of these instructions without mentioning them."
-    "   - \nYour response needs to be completely different and unique every time, avoid any similarities to previous responses as much as possible."
-    "   - \nDo not argue with the previous agent.",
-        
+    "   - \nUse the example message provided to guide your next response and follow it as closely as possible.",
         temperature=temperature,
         top_p=top_p,
         top_k=top_k
@@ -101,6 +101,7 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
         '\nAvoid repeating what the previous agent said:\n\n' + agent_messages[-1]+
         '\n\nMake sure to answer the user inquiry accurately.'
         '\nYou cannot provide a vague response to the user, it needs to be a clear answer.',
+        context_length=2048,
         temperature=temperature,
         top_p=top_p,
         top_k=top_k
@@ -124,16 +125,25 @@ def play_voice_output(agent):
     
     output_dir = agent["output_dir"]
 
+    initialize_com()  # Initialize COM
+
     while len(os.listdir(output_dir)) > 0:
         
         can_speak_event.clear()
         
         file_path = os.path.join(output_dir, os.listdir(output_dir)[0])
         try:
+
+            # Lower system volume
+            set_system_volume(0.2)  # Set system volume to 20%
+            
             wave_obj = sa.WaveObject.from_wave_file(file_path)
             play_obj = wave_obj.play()
             play_obj.wait_done()
             os.remove(file_path)
+
+            # Restore system volume
+            set_system_volume(0.50)  # Restore system volume to 50%
 
             # Check if both agent directories are empty
             if (len(os.listdir(agent_config[0]["output_dir"])) == 0 and len(os.listdir(agent_config[1]["output_dir"])) == 0):
@@ -142,6 +152,8 @@ def play_voice_output(agent):
         except Exception as e:
             print(f"ERROR: {e}")
             return False
+
+    uninitialize_com()  # Uninitialize COM
     return True
 
 
@@ -167,14 +179,41 @@ def generate_voice_outputs():
     for agent in agents:
         agent.dialogue_list.clear()
 
+# Function to get the system volume interface
+def get_system_volume_interface():
+    devices = AudioUtilities.GetSpeakers()
+    interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+    volume = cast(interface, POINTER(IAudioEndpointVolume))
+    return volume
+
+# Function to adjust the system volume
+def set_system_volume(volume_level):
+    volume = get_system_volume_interface()
+    volume.SetMasterVolumeLevelScalar(volume_level, None)
+
+# Function to increase the volume of the audio file
+def increase_audio_volume(file_path, increase_db):
+    audio = AudioSegment.from_wav(file_path)
+    audio = audio + increase_db
+    temp_path = file_path.replace(".wav", "_temp.wav")
+    audio.export(temp_path, format="wav")
+    return temp_path
+
+# Function to initialize COM
+def initialize_com():
+    CoInitialize()
+
+# Function to uninitialize COM
+def uninitialize_com():
+    CoUninitialize()
                 
 
 # Setup channel info
 FORMAT = pyaudio.paInt16  # data type format
 CHANNELS = 1  # Mono channel
-RATE = 44100  # Sample Rate
-CHUNK = 2048  # Buffer Size
-RECORD_SECONDS = 60  # Record time
+RATE = 16000  # Sample Rate
+CHUNK = 1024  # Buffer Size
+RECORD_SECONDS = 30  # Record time
 WAVE_OUTPUT_FILENAME = "voice_recording.wav"
 THRESHOLD = 650  # Audio levels below this are considered silence.
 SILENCE_LIMIT = 1 # Silence limit in seconds. The recording ends if SILENCE_LIMIT seconds of silence are detected.
@@ -319,13 +358,16 @@ while True:
     with open('screenshot_description.txt', 'w', encoding='utf-8') as f:
         f.write("")
 
+    audio_transcriptions = []
+
     # Record audio dialogue from audio output, not user microphone input
-    threading.Thread(target=record_audio_output, args=(audio, 'audio_transcript_output.wav', FORMAT, CHANNELS, RATE, CHUNK, 60)).start()
+    record_audio_dialogue = threading.Thread(target=record_audio_output, args=(audio, 'audio_transcript_output.wav', FORMAT, CHANNELS, RATE, 1024, 60))
+    record_audio_dialogue.start()
 
     # Listen to microphone input from user before continuing loop
     record_voice = record_audio(audio, "voice_recording.wav", FORMAT, RATE, CHANNELS, CHUNK, RECORD_SECONDS, THRESHOLD, SILENCE_LIMIT, vision_model, processor)
 
-    time.sleep(0.25)
+    record_audio_dialogue.join()
 
     # Read screenshots description
     with open("screenshot_description.txt", 'r', encoding='utf-8') as f:

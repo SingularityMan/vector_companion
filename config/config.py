@@ -82,7 +82,7 @@ class Agent():
             print("Response:", response.text)
             return agent_messages, "Failed to get a summary response."
         
-    def generate_text(self, messages, agent_messages, system_prompt, user_input, temperature=0.7, top_p=0.3, top_k=2000):
+    def generate_text(self, messages, agent_messages, system_prompt, user_input, context_length=32000, temperature=0.7, top_p=0.3, top_k=2000):
 
         global image_lock
 
@@ -109,11 +109,11 @@ class Agent():
             "messages": messages,
             "stream": False,
             "options":{
-                "repeat_penalty": 1.40,
+                "repeat_penalty": 1.15,
                 #"temperature": 1,
                 #"top_p": top_p,
                 #"top_k": top_k,
-                "num_ctx": 32000
+                "num_ctx": context_length
                 #"stop": []
                 }
         }
@@ -185,21 +185,19 @@ class VectorAgent():
                                
                                "\n\n[TASK 3, NARROW SCOPE, AGENT-ORIENTED]: Your Final task will be to generate a single example response for the AI agent named "+agent_name+" containing the following qualities:"
                                
-                               "\n\n1. The objective is to regulate and steer a conversation between two agents, named Axiom and Axis, matching the tone of both the most immediate context and the current agent's personality traits: "+agent_traits+" while preventing any kind of repetition by the agent."
-                               "\n2. Each agent response needs to be completely in character, keeping the agent traits mentioned above. The most important part of the response is the agent's personality traits expressed by the agent and avoiding repetition, keeping the conversation fresh."
-                               "\n3. Each agent response needs to be composed of 2 extremely brief, concise and contextually relevant sentences made up of more than 5 words but less than 10 words per sentence embodying the agent's unique personality traits."
-                               "\n4. Each agent response needs to be completely different but true to the agent's character, avoiding similarities in previous responses. However, the context should be quickly updated based on the most immediate situation."
-                               "\n5. If the agents start arguing with each other, break up the fight and keep their focus on the context."
-                               "\n6. Disrupt up any unwanted patterns such as: arguing, repetition, irrelevance, breaking character, inattentiveness, incoherence, etc."
-                               "\n7. You need to emphasize the agent's personality traits, the conversation history and the contextual information provided (focusing on key events and individuals in the context), combining all three to generate a response."
-                               "\n8. The agent should also quickly shift the conversation in a different direction and avoid dwelling on past subjects for too long."
-                               "\n9. The agent cannot speak poetically, metaphorically, nor use complex language and parables. The agent should be simple and direct yet be true to his character traits."
-                               "\n10. You must penalize any repetition or similarity between agents, making it clear each sentence needs to be unique."
-                               "\n11. The agent's response should be meaningful, not talking about mundane things like walls, trees, rocks, etc."
-                               "\n12. The agent should not be asking questions. Instead, the agent should be making comments, statements and opinions based on their personality traits outlined above."
-                               "\n13. If there is no audio transcript output, instruct the agent to focus on the immediate surroundings provided by the context instead."
-                               "\n\nAll of these instructions for Task 3 need to be encapsulated in a single example sentence for the agent in question."
-                               "\nThis means you're not supposed to outline these instructions, but instead provide an example response for the agent based on these instructions and personality traits of the agent."
+                               "\n1. Match Axiom and Axis' tone to context and traits, no repeats, no arguments, with a focus on collaboration, not competition."
+                               "\n2. Stay in character, avoid repetition."
+                               "\n3. Responses: brief, relevant, 5-10 words."
+                               "\n4. Differ responses, stay true to character."
+                               "\n5. Stop arguments, focus on context."
+                               "\n6. Avoid unwanted patterns: arguing, repeating, breaking character."
+                               "\n7. Use traits, history, and context in responses."
+                               "\n8. Shift conversation quickly, avoid past topics."
+                               "\n9. Be simple and direct, no complex language."
+                               "\n10. Penalize repetition, ensure unique responses."
+                               "\n11. Be meaningful, avoid mundane topics."
+                               "\n12. Make statements, no questions."
+                               "\n13. Focus on surroundings if no transcript."
                                
                                "\n\nComplete these tasks in order without mentioning them in any way. No acknowledgement, no offer of assistance, nothing. Just do it."})
 
@@ -558,14 +556,14 @@ def record_audio_output(audio, WAVE_OUTPUT_FILENAME, FORMAT, CHANNELS, RATE, CHU
 
         frames = []
 
-def transcribe_audio(model, WAVE_OUTPUT_FILENAME, RATE=44100):
+def transcribe_audio(model, WAVE_OUTPUT_FILENAME, RATE=16000):
 
     # Load audio and pad/trim it to fit 60 seconds
     audio_data = whisper.load_audio(WAVE_OUTPUT_FILENAME)
     audio_data = whisper.pad_or_trim(audio_data)
 
     # Ensure audio data is of the correct shape
-    max_audio_length = 60 * RATE  # 60 seconds * sample rate
+    max_audio_length = 30 * RATE  # 60 seconds * sample rate
     audio_data = audio_data[:max_audio_length]
 
     # Make log-Mel spectrogram and move to the same device as the model
@@ -583,13 +581,9 @@ def transcribe_audio(model, WAVE_OUTPUT_FILENAME, RATE=44100):
     # Decode the audio
     options = whisper.DecodingOptions(
     task="transcribe",
-    length_penalty=1,  # Apply length penalty for better long transcriptions
     prompt=None,
     prefix=None,
-    suppress_tokens="-1",
-    suppress_blank=True,
-    without_timestamps=True,  # Disable timestamps if not needed
-    max_initial_timestamp=1.0,
+    suppress_blank=False,
     fp16=True  # Keep using fp16 for performance
     )
 
@@ -597,7 +591,12 @@ def transcribe_audio(model, WAVE_OUTPUT_FILENAME, RATE=44100):
     user_voice_output = result.text
     #user_voice_output = find_repeated_words(user_voice_output_raw)
     #user_voice_output = remove_repetitive_phrases(user_voice_output)
-    os.remove(WAVE_OUTPUT_FILENAME)
+    try:
+        os.remove(WAVE_OUTPUT_FILENAME)
+    except Exception as e:
+        print("Error:", e)
+        user_voice_output = ""
+        return user_voice_output
     
     if len(user_voice_output.split()) <= 3:
         user_voice_output = ""
