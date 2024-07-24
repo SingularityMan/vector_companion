@@ -213,7 +213,7 @@ FORMAT = pyaudio.paInt16  # data type format
 CHANNELS = 1  # Mono channel
 RATE = 16000  # Sample Rate
 CHUNK = 1024  # Buffer Size
-RECORD_SECONDS = 30  # Record time
+RECORD_SECONDS = 60  # Record time
 WAVE_OUTPUT_FILENAME = "voice_recording.wav"
 THRESHOLD = 650  # Audio levels below this are considered silence.
 SILENCE_LIMIT = 1 # Silence limit in seconds. The recording ends if SILENCE_LIMIT seconds of silence are detected.
@@ -358,10 +358,10 @@ while True:
     with open('screenshot_description.txt', 'w', encoding='utf-8') as f:
         f.write("")
 
-    audio_transcriptions = []
+    audio_transcriptions = ""
 
     # Record audio dialogue from audio output, not user microphone input
-    record_audio_dialogue = threading.Thread(target=record_audio_output, args=(audio, 'audio_transcript_output.wav', FORMAT, CHANNELS, RATE, 1024, 60))
+    record_audio_dialogue = threading.Thread(target=record_audio_output, args=(audio, 'audio_transcript_output.wav', FORMAT, CHANNELS, RATE, 1024, 30))
     record_audio_dialogue.start()
 
     # Listen to microphone input from user before continuing loop
@@ -374,11 +374,18 @@ while True:
         screenshot_description = f.read()
 
     # Transcribe audio output
-    if os.path.exists('audio_transcript_output.wav'):
-        audio_transcript_output = transcribe_audio(model, 'audio_transcript_output.wav')
-    else:
-        print("No audio transcribed")
-        audio_transcript_output = ""
+    for file in os.listdir(os.getcwd()):
+        if "audio_transcript_output" in file:
+            file_path = os.path.join(os.getcwd(), file)
+            if os.path.isfile(file_path):
+                audio_transcript_output = transcribe_audio(model, file_path)
+                audio_transcriptions += audio_transcript_output
+            else:
+                print("No audio transcribed")
+                audio_transcript_output = ""
+
+    audio_transcript_output = audio_transcriptions
+    print("[AUDIO TRANSCRIPT OUTPUT]:", audio_transcript_output)
 
     # Transcribe user audio input
     if os.path.exists(WAVE_OUTPUT_FILENAME):

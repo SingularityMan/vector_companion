@@ -109,7 +109,7 @@ class Agent():
             "messages": messages,
             "stream": False,
             "options":{
-                "repeat_penalty": 1.15,
+                "repeat_penalty": 1.30,
                 #"temperature": 1,
                 #"top_p": top_p,
                 #"top_k": top_k,
@@ -240,7 +240,7 @@ class VectorAgent():
             return "Failed to get a response."
 
 
-def find_repeated_words(text, threshold=6):
+def find_repeated_words(text, threshold=10):
     # Regular expression pattern to match words
     pattern = r'\b(\w+)\b'
     # Find all words
@@ -483,6 +483,7 @@ def record_audio(audio, WAVE_OUTPUT_FILENAME, FORMAT, RATE, CHANNELS, CHUNK, REC
 def record_audio_output(audio, WAVE_OUTPUT_FILENAME, FORMAT, CHANNELS, RATE, CHUNK, RECORD_SECONDS):
 
     global can_speak
+    file_index = 0
 
     while True:
 
@@ -536,22 +537,25 @@ def record_audio_output(audio, WAVE_OUTPUT_FILENAME, FORMAT, CHANNELS, RATE, CHU
 
         print("* done recording Audio Transcript")
         can_speak = False
-        
+        file_index += 1
+
+        # Stop the stream
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
+
+        # Save the audio to a .wav file
+        wf = wave.open('audio_transcript_output{}.wav'.format(file_index), 'wb')
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(p.get_sample_size(FORMAT))
+        wf.setframerate(RATE)
+        wf.writeframes(b''.join(frames))
+        wf.close()
+
+        if file_index >= 2:
+            can_speak_event.clear()
+            
         if not can_speak_event.is_set():
-
-            # Stop the stream
-            stream.stop_stream()
-            stream.close()
-            p.terminate()
-
-            # Save the audio to a .wav file
-            wf = wave.open('audio_transcript_output.wav', 'wb')
-            wf.setnchannels(CHANNELS)
-            wf.setsampwidth(p.get_sample_size(FORMAT))
-            wf.setframerate(RATE)
-            wf.writeframes(b''.join(frames))
-            wf.close()
-
             break
 
         frames = []
@@ -588,9 +592,9 @@ def transcribe_audio(model, WAVE_OUTPUT_FILENAME, RATE=16000):
     )
 
     result = whisper.decode(model, mel, options)
-    user_voice_output = result.text
-    #user_voice_output = find_repeated_words(user_voice_output_raw)
-    #user_voice_output = remove_repetitive_phrases(user_voice_output)
+    user_voice_output_raw = result.text
+    user_voice_output = find_repeated_words(user_voice_output_raw)
+    user_voice_output = remove_repetitive_phrases(user_voice_output)
     try:
         os.remove(WAVE_OUTPUT_FILENAME)
     except Exception as e:
