@@ -125,7 +125,7 @@ def play_voice_output(agent):
     
     output_dir = agent["output_dir"]
 
-    initialize_com()  # Initialize COM
+    #initialize_com()  # Initialize COM
 
     while len(os.listdir(output_dir)) > 0:
         
@@ -135,7 +135,7 @@ def play_voice_output(agent):
         try:
 
             # Lower system volume
-            set_system_volume(0.2)  # Set system volume to 20%
+            #set_system_volume(0.2)  # Set system volume to 20%
             
             wave_obj = sa.WaveObject.from_wave_file(file_path)
             play_obj = wave_obj.play()
@@ -143,7 +143,7 @@ def play_voice_output(agent):
             os.remove(file_path)
 
             # Restore system volume
-            set_system_volume(0.50)  # Restore system volume to 50%
+            #set_system_volume(0.50)  # Restore system volume to 50%
 
             # Check if both agent directories are empty
             if (len(os.listdir(agent_config[0]["output_dir"])) == 0 and len(os.listdir(agent_config[1]["output_dir"])) == 0):
@@ -153,7 +153,7 @@ def play_voice_output(agent):
             print(f"ERROR: {e}")
             return False
 
-    uninitialize_com()  # Uninitialize COM
+    #uninitialize_com()  # Uninitialize COM
     return True
 
 
@@ -272,7 +272,7 @@ agents_personality_traits = {
     ],
     "axis": [
         ["intuitive", ["snarky", "taunting", "mischievous", "entertaining"]],
-        ["satirical", ["mocking", "sadistic", "sarcastic", "sharp-witted", "scintillating"]],
+        ["satirical", ["mocking", "sadistic", "sarcastic", "sharp-witted", "scintillating", "humorously morbid"]],
         ["witty", ["witty", "seductive", "charming", "sociable", "comical", "jocular", "ingenius"]]
     ]
 }
