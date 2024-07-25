@@ -92,7 +92,7 @@ class Agent():
             "Content-Type": "application/json"
         }
 
-        if len(messages) > 100:
+        if len(messages) > 20:
             messages = [{"role": "system", "content": system_prompt}]
             agent_messages, conversation_summary = self.summarize_conversation(messages, agent_messages)
             messages.append({"role": "user", "content": conversation_summary})
@@ -109,8 +109,8 @@ class Agent():
             "messages": messages,
             "stream": False,
             "options":{
-                "repeat_penalty": 1.30,
-                #"temperature": 1,
+                "repeat_penalty": 1.40,
+                "temperature": 1,
                 #"top_p": top_p,
                 #"top_k": top_k,
                 "num_ctx": context_length
@@ -126,15 +126,15 @@ class Agent():
             response_data = response.json()
             # Extract the assistant's message content
             text_response = response_data.get("message", {}).get("content", "No response received")
-            if text_response.startswith('"') and text_response.endswith('"'):
-                text_response = text_response[1:-2]
+            # Remove all quotation marks
+            text_response = re.sub(r'"', '', text_response)
             # Remove unwanted characters
             text_response = re.sub(r'[^\x00-\x7F]+', '', text_response)
             # Remove text within parentheses
             text_response = re.sub(r'\(.*?\)', '', text_response)
-            # Include asterisks and text between them
+            # Remove asterisks and text between them
             text_response = re.sub(r'\*.*?\*', '', text_response)
-            # Include visible "\n" in text outputs
+            # Remove visible "\n" in text outputs
             text_response = text_response.replace('\\n', '')
             #print(f"{self.agent_name} Response:", f"{text_response}")
             agent_messages.append(f"Agent Name:{self.agent_name} ({self.agent_gender})\n Agent Response: {text_response}")
@@ -143,7 +143,6 @@ class Agent():
             print("Failed to get a response. Status code:", response.status_code)
             print("Response:", response.text)
             return messages, agent_messages, "Failed to get a response."
-
 class VectorAgent():
 
     def __init__(self):
@@ -173,8 +172,8 @@ class VectorAgent():
 
                                "\n\nYour task will be separated between three different categories, the scope ranging from broad to narrow for each task:"
 
-                               "\n\n[TASK 1, BROADEST SCOPE, CONTEXT-ORIENTED]: Your first task will be to generate a detailed, one paragraph description of the current situation based on this context, highlighting the most important parts of the most recent situation while ignoring the lesser parts."
-                               "\nThe sentence needs to place a special emphasis on the event that is occurring right now so the agents can remain up to date."
+                               "\n\n[TASK 1, BROADEST SCOPE, CONTEXT-ORIENTED]: Your first task will be to generate a detailed paragraph containing key details of the current situation based on this context, highlighting the most important parts of the most recent situation while ignoring the lesser parts."
+                               "\nThe paragraph needs to place a special emphasis on the event that is occurring right now so the agents can remain up to date."
 
                                "\n\n[TASK 2, SECOND-MOST BROAD, OBJECTIVE-ORIENTED]: Your second task would be to set a one-sentence objective behind the scenes that augment the user's experience throughout the conversation."
                                "\nYou will use the contextual information provided and the converesation history in order to plan and execute an objective that is directly tied to them."
@@ -183,11 +182,11 @@ class VectorAgent():
                                "\nIn your objective statement, you must explain how this augments the user's experience."
                                "\nThe objective statement needs to be different from the instructions below. Those are geared towards the individual agent's behavior."
                                
-                               "\n\n[TASK 3, NARROW SCOPE, AGENT-ORIENTED]: Your Final task will be to generate a single example response for the AI agent named "+agent_name+" containing the following qualities:"
+                               "\n\n[TASK 3, NARROW SCOPE, AGENT-ORIENTED]: Use the agent to complete the objective. Generate a single example response for the AI agent named "+agent_name+" containing the following qualities:"
                                
-                               "\n1. Match Axiom and Axis' tone to context and traits, no repeats, no arguments, with a focus on collaboration, not competition."
+                               "\n\n1. Match the agent's tone to the context and traits, no repeats, no arguments, with a focus on collaboration, not competition."
                                "\n2. Stay in character, avoid repetition."
-                               "\n3. Responses: brief, relevant, 5-10 words."
+                               "\n3. Responses: brief, relevant, 5-10 words per sentence."
                                "\n4. Differ responses, stay true to character."
                                "\n5. Stop arguments, focus on context."
                                "\n6. Avoid unwanted patterns: arguing, repeating, breaking character."
@@ -198,6 +197,7 @@ class VectorAgent():
                                "\n11. Be meaningful, avoid mundane topics."
                                "\n12. Make statements, no questions."
                                "\n13. Focus on surroundings if no transcript."
+                               "\n14. The agent must avoid lame, cliche, unoriginal, cheesy and generic responses."
                                
                                "\n\nComplete these tasks in order without mentioning them in any way. No acknowledgement, no offer of assistance, nothing. Just do it."})
 

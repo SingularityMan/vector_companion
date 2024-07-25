@@ -74,10 +74,14 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
         agent_messages,
         agent.system_prompt1,
     "   - \nYou must remain in character as "+agent.agent_name+". You have the following personality traits and must respond accordingly: "+agent.trait_set+
+    "   - \nHere is a transcript of the audio:\n\n"+ audio_transcript_output +
     "   - \n\n**Instructions:**\n\n"+ additional_conversation_instructions +
     "   - \nDo not mention any actions taken ('Here's my response: <action taken>', 'I will respond as XYZ agent', 'I say with a smirk', etc.)"
     "   - \nFollow all of these instructions without mentioning them."
-    "   - \nUse the example message provided to guide your next response and follow it as closely as possible.",
+    "   - \nUse the example message provided to guide your next response and follow it as closely as possible."
+    "   - \nAvoid using common words and phrases like 'game on, the game's afoot, the plot thickens, the drama unfolds, etc.'"
+    "   - \nAvoid sounding generic or cheesy. Take your role seriously.",
+        context_length=32000,
         temperature=temperature,
         top_p=top_p,
         top_k=top_k
@@ -420,6 +424,8 @@ while True:
             agent.dialogue_list.extend(message_dump[0][agent.agent_name])
 
         generate_voice_outputs()
+
+        print("[CONVERSATION LENGTH]:", len(messages))
 
     else:
         print("Dialogue in progress...")
