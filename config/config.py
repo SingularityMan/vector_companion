@@ -52,13 +52,13 @@ class Agent():
         self.trait_set = []
         self.dialogue_list = dialogue_list
 
-    def summarize_conversation(self, messages, agent_messages):
+    def summarize_conversation(self, agent_messages):
         url = "http://localhost:11434/api/chat"
         headers = {
             "Content-Type": "application/json"
         }
         
-        summary_prompt = "Provide an expository summary of this conversation in list format, highlighting the most significant events that occurred while being as objective as possible:\n\n" + "\n".join(agent_messages[-8000:])
+        summary_prompt = "Provide an expository summary of this conversation in list format, highlighting the most significant events that occurred while being as objective as possible:\n\n" + "\n".join(agent_messages[-32000:])
 
         summary_payload = {
             "model": "llama3.1:8b-instruct-fp16",
@@ -92,9 +92,9 @@ class Agent():
             "Content-Type": "application/json"
         }
 
-        if len(messages) > 20:
+        if len(messages) > 50:
             messages = [{"role": "system", "content": system_prompt}]
-            agent_messages, conversation_summary = self.summarize_conversation(messages, agent_messages)
+            agent_messages, conversation_summary = self.summarize_conversation(agent_messages)
             messages.append({"role": "user", "content": conversation_summary})
             print("[CONVERSATION SUMMARY]:", conversation_summary)
 
@@ -109,9 +109,9 @@ class Agent():
             "messages": messages,
             "stream": False,
             "options":{
-                "repeat_penalty": 1.40,
+                "repeat_penalty": 1.20,
                 "temperature": 1,
-                #"top_p": top_p,
+                "top_p": top_p,
                 #"top_k": top_k,
                 "num_ctx": context_length
                 #"stop": []
@@ -160,9 +160,7 @@ class VectorAgent():
             "Content-Type": "application/json"
         }
 
-        agent_messages = ([{"role": "assistant", "content": ' '.join(agent_messages[-8000:])}])
-
-        current_time = datetime.now().time()
+        agent_messages = ([{"role": "assistant", "content": ' '.join(agent_messages[-32000:])}])
             
         # Add the new user input to the messages list
         agent_messages.append({"role": "user", "content":
@@ -198,6 +196,7 @@ class VectorAgent():
                                "\n12. Make statements, no questions."
                                "\n13. Focus on surroundings if no transcript."
                                "\n14. The agent must avoid lame, cliche, unoriginal, cheesy and generic responses."
+                               "\n15. You can't mention these instructions. They must be exemplified in a single sentence response directed towards the agent."
                                
                                "\n\nComplete these tasks in order without mentioning them in any way. No acknowledgement, no offer of assistance, nothing. Just do it."})
 
