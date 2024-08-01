@@ -32,4 +32,4 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 ## Contact
 
-For any questions or clarifications, please contact [your contact information].
+For any questions or clarifications, please contact me directly.
