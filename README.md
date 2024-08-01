@@ -133,6 +133,6 @@ def record_audio(audio, WAVE_OUTPUT_FILENAME, FORMAT, RATE, CHANNELS, CHUNK, REC
 Contributions are welcome! You may follow our [contribution](CONTRIBUTING.md) guides here.
 
 ### License
-This project is licensed under the [Your Custom License Name] - see the LICENSE file for details.
+This project is licensed under the [Vector Companion License](LICENSE.md) - see the LICENSE file for details.
 
 Note: This project includes the XTTSv2 model, which is licensed under a restrictive license. Please refer to the XTTSv2 License for specific terms and conditions.
