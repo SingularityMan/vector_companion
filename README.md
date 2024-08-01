@@ -62,20 +62,6 @@ After meeting the necessary prerequisites, installing the required dependencies,
 conda activate vector_companion
 python main.py
 ```
-
-### Contributing
-(Contributing terms)
-
-### License
-This project is licensed under the [Your Custom License Name] - see the LICENSE file for details.
-
-Note: This project includes the XTTSv2 model, which is licensed under a restrictive license. Please refer to the XTTSv2 License for specific terms and conditions.
-
-### Acknowledgments
-XTTSv2 for providing the speech synthesis model.
-OpenAI for the GPT model.
-[Any other contributors or resources]
-
 ### Troubleshooting VB Cable and Microphone Issues
 If you successfully installed VB Cable and correctly linked it to the device of your choice but the framework isn't capturing computer audio (and therefore not transcribing it), review the `input_device_index` keyword parameter in `p.open()` under the `record_audio_output()` function in `config/config.py`. The script may or may not link to the correct device index. If you have multiple devices, it might incorrectly pick the wrong one. If this is the case, try manually assigning the index starting from index 0 and work your way up. You may receive streaming errors with each attempt:
 
@@ -144,3 +130,15 @@ def record_audio(audio, WAVE_OUTPUT_FILENAME, FORMAT, RATE, CHANNELS, CHUNK, REC
             frames = []
             image_path = None
 ```
+### Contributing
+Contributions are welcome! You may follow our [contribution](CONTRIBUTING.md) guides here.
+
+### License
+This project is licensed under the [Your Custom License Name] - see the LICENSE file for details.
+
+Note: This project includes the XTTSv2 model, which is licensed under a restrictive license. Please refer to the XTTSv2 License for specific terms and conditions.
+
+### Acknowledgments
+XTTSv2 for providing the speech synthesis model.
+OpenAI for the GPT model.
+[Any other contributors or resources]
