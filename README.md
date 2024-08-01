@@ -137,8 +137,3 @@ Contributions are welcome! You may follow our [contribution](CONTRIBUTING.md) gu
 This project is licensed under the [Your Custom License Name] - see the LICENSE file for details.
 
 Note: This project includes the XTTSv2 model, which is licensed under a restrictive license. Please refer to the XTTSv2 License for specific terms and conditions.
-
-### Acknowledgments
-XTTSv2 for providing the speech synthesis model.
-OpenAI for the GPT model.
-[Any other contributors or resources]
