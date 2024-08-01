@@ -12,10 +12,10 @@ Your friendly AI Companion, with two distinct personalities: Axiom and Axis! Her
 - [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
+- [Troubleshooting VB Cable and Microphone Issues](#troubleshooting-vb-cable-and-microphone-issues)
 - [Contributing](#contributing)
 - [License](#license)
 - [Acknowledgments](#acknowledgments)
-- [Troubleshooting VB Cable and Microphone Issues](#troubleshooting-vb-cable-and-microphone-issues)
 
 ## Introduction
 
