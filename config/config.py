@@ -17,10 +17,7 @@ import re
 import random
 from collections import Counter
 import time
-from transformers import pipeline
 from bs4 import BeautifulSoup
-import librosa
-import noisereduce as nr
 import soundfile as sf
 from datetime import datetime
 
@@ -82,7 +79,7 @@ class Agent():
             print("Response:", response.text)
             return agent_messages, "Failed to get a summary response."
         
-    def generate_text(self, messages, agent_messages, system_prompt, user_input, context_length=32000, temperature=0.7, top_p=0.3, top_k=2000):
+    def generate_text(self, messages, agent_messages, system_prompt, user_input, context_length=32000, temperature=0.7, top_p=0.3, top_k=100000):
 
         global image_lock
 
@@ -92,11 +89,13 @@ class Agent():
             "Content-Type": "application/json"
         }
 
-        if len(messages) > 50:
+        if len(messages) > 30:
+            print("[MESSAGE LIMIT EXCEEDED. SUMMARRIZING CONVERSATION...]")
             messages = [{"role": "system", "content": system_prompt}]
             agent_messages, conversation_summary = self.summarize_conversation(agent_messages)
             messages.append({"role": "user", "content": conversation_summary})
             print("[CONVERSATION SUMMARY]:", conversation_summary)
+            context_length = 4096
 
         messages[0] = {"role": "system", "content": system_prompt}
             
@@ -110,9 +109,9 @@ class Agent():
             "stream": False,
             "options":{
                 "repeat_penalty": 1.20,
-                "temperature": 1,
+                "temperature": temperature,
                 "top_p": top_p,
-                #"top_k": top_k,
+                "top_k": top_k,
                 "num_ctx": context_length
                 #"stop": []
                 }
@@ -137,12 +136,13 @@ class Agent():
             # Remove visible "\n" in text outputs
             text_response = text_response.replace('\\n', '')
             #print(f"{self.agent_name} Response:", f"{text_response}")
-            agent_messages.append(f"Agent Name:{self.agent_name} ({self.agent_gender})\n Agent Response: {text_response}")
+            agent_messages.append(f"Agent Name:{self.agent_name}, ({self.agent_gender})\nAgent Response: {text_response}")
             return messages, agent_messages, text_response
         else:
             print("Failed to get a response. Status code:", response.status_code)
             print("Response:", response.text)
             return messages, agent_messages, "Failed to get a response."
+        
 class VectorAgent():
 
     def __init__(self):
@@ -160,7 +160,7 @@ class VectorAgent():
             "Content-Type": "application/json"
         }
 
-        agent_messages = ([{"role": "assistant", "content": ' '.join(agent_messages[-32000:])}])
+        agent_messages = ([{"role": "assistant", "content": ' '.join(agent_messages[-4096:])}])
             
         # Add the new user input to the messages list
         agent_messages.append({"role": "user", "content":
@@ -239,7 +239,7 @@ class VectorAgent():
             return "Failed to get a response."
 
 
-def find_repeated_words(text, threshold=10):
+def find_repeated_words(text, threshold=6):
     # Regular expression pattern to match words
     pattern = r'\b(\w+)\b'
     # Find all words
@@ -267,7 +267,7 @@ def check_sentence_length(text, message_length=45, sentence_length=2):
     sentences = re.split(r'(?:(?<=[.?;]))\s', text.strip())
     #print("Sentences: ", sentences)
     if sentences:
-        if len(sentences) >= sentence_length:
+        if len(sentences) > 1:
             print("Sentence 1 length: ", len(sentences[0]))
             print("Sentence 2 length: ", len(sentences[1]))
             return (sentences[:sentence_length], ' '.join(sentences[:sentence_length]))
@@ -479,7 +479,7 @@ def record_audio(audio, WAVE_OUTPUT_FILENAME, FORMAT, RATE, CHANNELS, CHUNK, REC
         print(f"An error occurred in record_audio: {e}")
         return None
 
-def record_audio_output(audio, WAVE_OUTPUT_FILENAME, FORMAT, CHANNELS, RATE, CHUNK, RECORD_SECONDS):
+def record_audio_output(audio, WAVE_OUTPUT_FILENAME, FORMAT, CHANNELS, RATE, CHUNK, RECORD_SECONDS, file_index_count):
 
     global can_speak
     file_index = 0
@@ -551,7 +551,7 @@ def record_audio_output(audio, WAVE_OUTPUT_FILENAME, FORMAT, CHANNELS, RATE, CHU
         wf.writeframes(b''.join(frames))
         wf.close()
 
-        if file_index >= 2:
+        if file_index >= file_index_count:
             can_speak_event.clear()
             
         if not can_speak_event.is_set():
