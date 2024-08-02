@@ -77,11 +77,8 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
     "   - \nHere is a transcript of the audio:\n\n"+ audio_transcript_output +
     "   - \n\n**Instructions:**\n\n"+ additional_conversation_instructions +
     "   - \nDo not mention any actions taken ('Here's my response: <action taken>', 'I will respond as XYZ agent', 'I say with a smirk', etc.)"
-    "   - \nFollow all of these instructions without mentioning them."
-    "   - \nUse the example message provided to guide your next response and follow it as closely as possible."
-    "   - \nAvoid repeating yourself at all costs."
-    "   - \nAvoid using common words and phrases like 'game on, the game's afoot, the plot thickens, the drama unfolds, etc.'"
-    "   - \nAvoid sounding generic or cheesy. Take your role seriously.",
+    "   - \nYou must respond in a conversational manner with a special emphasis on the current situation."
+    "   - \nFollow all of these instructions without mentioning them.",
         context_length=32000,
         temperature=1,
         top_p=0.9,

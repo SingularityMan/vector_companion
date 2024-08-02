@@ -184,7 +184,7 @@ class VectorAgent():
                                
                                "\n\n1. Match the agent's tone to the context and traits, no repeats, no arguments, with a focus on collaboration, not competition."
                                "\n2. Stay in character, avoid repetition."
-                               "\n3. Responses: brief, relevant, 5-10 words per sentence."
+                               "\n3. Responses: 2 brief, relevant, sentences."
                                "\n4. Differ responses, stay true to character."
                                "\n5. Stop arguments, focus on context."
                                "\n6. Avoid unwanted patterns: arguing, repeating, breaking character."
@@ -513,7 +513,7 @@ def record_audio_output(audio, WAVE_OUTPUT_FILENAME, FORMAT, CHANNELS, RATE, CHU
                         rate=RATE,
                         input=True,
                         frames_per_buffer=CHUNK,
-                        input_device_index=device_index)
+                        input_device_index=2)
 
         print("* recording Audio Transcript")
 
