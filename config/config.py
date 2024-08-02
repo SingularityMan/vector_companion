@@ -90,7 +90,7 @@ class Agent():
         }
 
         if len(messages) > 30:
-            print("[MESSAGE LIMIT EXCEEDED. SUMMARRIZING CONVERSATION...]")
+            print("[MESSAGE LIMIT EXCEEDED. SUMMARIZING CONVERSATION...]")
             messages = [{"role": "system", "content": system_prompt}]
             agent_messages, conversation_summary = self.summarize_conversation(agent_messages)
             messages.append({"role": "user", "content": conversation_summary})
