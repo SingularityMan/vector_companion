@@ -68,6 +68,21 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
 
         agent_trait_set = vectorAgent.gather_agent_traits(agent.trait_set)
         additional_conversation_instructions = vectorAgent.generate_text(agent.agent_name, agent_messages, agent_trait_set, screenshot_description, audio_transcript_output)
+        humor_list = [
+                    "Parodying",
+                    "Lampooning",
+                    "Mocking",
+                    "Ridiculing",
+                    "Caricaturing",
+                    "Deriding",
+                    "Spoofing",
+                    "Burlesquing",
+                    "Mimicking",
+                    "Poking fun at",
+                    "Roasting"
+                ]
+        
+        humor = random.choice(humor_list)
     
         messages, agent_messages, generated_text = agent.generate_text(
         messages,
@@ -77,7 +92,7 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
     "   - \nHere is a transcript of the audio:\n\n"+ audio_transcript_output +
     "   - \n\n**Instructions:**\n\n"+ additional_conversation_instructions +
     "   - \nDo not mention any actions taken ('Here's my response: <action taken>', 'I will respond as XYZ agent', 'I say with a smirk', etc.)"
-    "   - \nYou must respond in a conversational manner with a special emphasis on the current situation."
+    "   - \nYou must respond in 1 brief sentence with a special emphasis on "+humor+" the current situation."
     "   - \nFollow all of these instructions without mentioning them.",
         context_length=32000,
         temperature=1,

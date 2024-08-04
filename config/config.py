@@ -90,7 +90,7 @@ class Agent():
         }
 
         if len(messages) > 30:
-            print("[MESSAGE LIMIT EXCEEDED. SUMMARIZING CONVERSATION...]")
+            print("[MESSAGE LIMIT EXCEEDED. SUMMARRIZING CONVERSATION...]")
             messages = [{"role": "system", "content": system_prompt}]
             agent_messages, conversation_summary = self.summarize_conversation(agent_messages)
             messages.append({"role": "user", "content": conversation_summary})
@@ -168,35 +168,17 @@ class VectorAgent():
                                "\n\nScreenshot\OCR description: "+screenshot_description+
                                "\n\nAudio Transcript Output: "+audio_transcript_output+
 
-                               "\n\nYour task will be separated between three different categories, the scope ranging from broad to narrow for each task:"
+                               "\n\nYour task will be separated between different category: "# the scope ranging from broad to narrow for each task:"
 
-                               "\n\n[TASK 1, BROADEST SCOPE, CONTEXT-ORIENTED]: Your first task will be to generate a detailed paragraph containing key details of the current situation based on this context, highlighting the most important parts of the most recent situation while ignoring the lesser parts."
-                               "\nThe paragraph needs to place a special emphasis on the event that is occurring right now so the agents can remain up to date."
+                               "\n\n[TASK, CONTEXT-ORIENTED]: Your task will be to generate 1 sentence containing key details of the current situation based on this context, highlighting the most important parts of the most recent situation while ignoring the lesser parts."
+                               "\nThe sentence needs to place a special emphasis on the event that is occurring right now so the agents can remain up to date."
 
-                               "\n\n[TASK 2, SECOND-MOST BROAD, OBJECTIVE-ORIENTED]: Your second task would be to set a one-sentence objective behind the scenes that augment the user's experience throughout the conversation."
-                               "\nYou will use the contextual information provided and the converesation history in order to plan and execute an objective that is directly tied to them."
-                               "\nThen use the agent in order to complete this objective."
-                               "\nYou must update the objective in real-time, placing more emphasis on the most recent events and less emphasis on less recent ones."
-                               "\nIn your objective statement, you must explain how this augments the user's experience."
-                               "\nThe objective statement needs to be different from the instructions below. Those are geared towards the individual agent's behavior."
-                               
-                               "\n\n[TASK 3, NARROW SCOPE, AGENT-ORIENTED]: Use the agent to complete the objective. Generate a single example response for the AI agent named "+agent_name+" containing the following qualities:"
-                               
-                               "\n\n1. Match the agent's tone to the context and traits, no repeats, no arguments, with a focus on collaboration, not competition."
-                               "\n2. Stay in character, avoid repetition."
-                               "\n3. Responses: 2 brief, relevant, sentences."
-                               "\n4. Differ responses, stay true to character."
-                               "\n5. Stop arguments, focus on context."
-                               "\n6. Avoid unwanted patterns: arguing, repeating, breaking character."
-                               "\n7. Use traits, history, and context in responses."
-                               "\n8. Shift conversation quickly, avoid past topics."
-                               "\n9. Be simple and direct, no complex language."
-                               "\n10. Penalize repetition, ensure unique responses."
-                               "\n11. Be meaningful, avoid mundane topics."
-                               "\n12. Make statements, no questions."
-                               "\n13. Focus on surroundings if no transcript."
-                               "\n14. The agent must avoid lame, cliche, unoriginal, cheesy and generic responses."
-                               "\n15. You can't mention these instructions. They must be exemplified in a single sentence response directed towards the agent."
+                               #"\n\n[TASK 2, SECOND-MOST BROAD, OBJECTIVE-ORIENTED]: Your second task would be to set a one-sentence objective behind the scenes that augment the user's experience throughout the conversation."
+                               #"\nYou will use the contextual information provided and the converesation history in order to plan and execute an objective that is directly tied to them."
+                               #"\nThen use the agent in order to complete this objective."
+                               #"\nYou must update the objective in real-time, placing more emphasis on the most recent events and less emphasis on less recent ones."
+                               #"\nIn your objective statement, you must explain how this augments the user's experience."
+                               #"\nThe objective statement needs to be different from the instructions below. Those are geared towards the individual agent's behavior."
                                
                                "\n\nComplete these tasks in order without mentioning them in any way. No acknowledgement, no offer of assistance, nothing. Just do it."})
 
@@ -513,7 +495,7 @@ def record_audio_output(audio, WAVE_OUTPUT_FILENAME, FORMAT, CHANNELS, RATE, CHU
                         rate=RATE,
                         input=True,
                         frames_per_buffer=CHUNK,
-                        input_device_index=device_index)
+                        input_device_index=2)
 
         print("* recording Audio Transcript")
 
