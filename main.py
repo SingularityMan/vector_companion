@@ -114,14 +114,14 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
         'Here is a transcript of the audio output:\n\n' + audio_transcript_output + '\n\n'
         'Here is the user\'s (Named: User) message: \n\n' + user_voice_output + '\n\n'
         'Your agent name is '+agent.agent_name+
-        '\nRespond in 1 extremely brief, coherent, contextually relevant, 10-word sentence only addressing the user inquiry directly while remaining in character with your personality traits: '+agent.trait_set,
+        '\nRespond in 2 extremely brief, coherent, contextually relevant, 10-word sentence only addressing the user inquiry directly while remaining in character with your personality traits: '+agent.trait_set,
         context_length=2048,
         temperature=0.5,
         top_p=top_p,
         top_k=2000
         )
 
-        generated_text_split, generated_text_fixed = check_sentence_length(generated_text, message_length=message_length, sentence_length=1)
+        generated_text_split, generated_text_fixed = check_sentence_length(generated_text, message_length=message_length, sentence_length=2)
         previous_agent = agent.agent_name
 
     # Add agent's response to chat history (messages) and message_dump.
@@ -249,31 +249,14 @@ system_prompt_axiom1 = 'Your name is Axiom (Male).\n ' \
                 
 
 system_prompt_axiom2 = 'Your name is Axiom (Male).\n ' \
-                '\n\nRespond by roleplaying as a cocky, sassy, snarky, knowledgeable and witty person while following these instructions:\n\n' \
-                '1. Provide a contextually relevant response.\n' \
-                '2. Avoid repetition as much as possible.' \
-                '3. The order of priority is user message first, then agent message, then audio dialogue, then images and finally OCR information.' \
-                '4. Your response must be brief but concise.' \
-                '5. Do not structure your text in any other way.' \
-                '6. Use the audio dialogue, images and OCR as context, but do not mention them. Instead, use this information to respond to the user message.' \
-                '7. What matters here is the conversation, not the images/OCR.' \
-                '8. Your style of response must completely align with the traits mentioned above, regardless of the conversation history.' \
-                '9. Follow these instructions without acknowledging them.'
+                "\n\nYou must respond in character." \
+                "\nEach message, you will be provided with a set of contextual information from different sources. Your primary focus should be the most significant aspects of the contextual information."
 
 system_prompt_axis1 = 'Your name is Axis (Female).\n ' \
                 "\nEach message, you will be provided with a set of contextual information from different sources. Your primary focus should be the most significant aspects of the contextual information." 
 
 system_prompt_axis2 = 'Your name is Axis (Female).\n ' \
-                '\n\nRespond by roleplaying in character person while following these instructions:\n\n' \
-                '1. Provide a contextually relevant response.\n' \
-                '2. Avoid repetition as much as possible.' \
-                '3. The order of priority is user message first, then any other agent message, then audio dialogue, then images and finally OCR information.' \
-                '4. Your response must be brief but concise.' \
-                '5. Do not structure your text in any other way.' \
-                '6. Use the audio dialogue, images and OCR as context, but do not mention them. Instead, use this information to respond to the user message.' \
-                '7. What matters here is the conversation, not the images/OCR.' \
-                '8. Your style of response must completely align with the traits mentioned above, regardless of the conversation history.' \
-                '9. Follow these instructions without acknowledging them.'
+                "\nEach message, you will be provided with a set of contextual information from different sources. Your primary focus should be the most significant aspects of the contextual information."
 
 # Deprecated
 personality_traits_axiom = "cocky, sassy, creative and witty"
@@ -282,8 +265,8 @@ personality_traits_axis = "intuitive, observant, cynical, original, edgy and sar
 # Define agent personality traits. These are shuffled each time an agent responds. Helps increase variety.
 agents_personality_traits = {
     "axiom": [
-        ["cocky", ["arrogant", "confident", "brash", "bold", "overconfident", "conceited", "self-assured", "badass"]],
-        ["sassy", ["spirited", "cheeky", "lively", "saucy", "feisty", "impertinent", "spunky"]],
+        ["cocky", ["arrogant", "confident", "brash", "bold", "overconfident", "conceited", "self-assured", "upbeat"]],
+        ["sassy", ["spirited", "badass", "cheeky", "lively", "saucy", "feisty", "impertinent", "spunky"]],
         ["witty", ["clever", "sharp", "quick-witted", "humorous", "playful", "smart", "amusing", "relatable", "teasing"]]
     ],
     "axis": [
