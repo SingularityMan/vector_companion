@@ -10,5 +10,4 @@ Requests==2.32.3
 simpleaudio==1.0.4
 soundfile==0.12.1
 transformers==4.34.1
-TTS==0.22.0
 whisper==1.1.10
