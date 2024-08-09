@@ -100,7 +100,7 @@ def record_audio_output(audio, WAVE_OUTPUT_FILENAME, FORMAT, CHANNELS, RATE, CHU
                         rate=RATE,
                         input=True,
                         frames_per_buffer=CHUNK,
-                        input_device_index=device_index)
+                        input_device_index=device_index) <------------------------------------- device_index
 
         print("* recording Audio Transcript")
 ```
@@ -125,7 +125,7 @@ def record_audio(audio, WAVE_OUTPUT_FILENAME, FORMAT, RATE, CHANNELS, CHUNK, REC
                 continue
 
             # Start Recording
-            stream = audio.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, input_device_index=1, frames_per_buffer=CHUNK)
+            stream = audio.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, input_device_index=1, frames_per_buffer=CHUNK) <------------------------------- device index
             #print("waiting for speech...")
             frames = []
             image_path = None
