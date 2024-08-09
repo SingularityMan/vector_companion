@@ -79,7 +79,8 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
                     "Burlesquing",
                     "Mimicking",
                     "Poking fun at",
-                    "Roasting"
+                    "Roasting",
+                    "self-deprecating"
                 ]
         
         humor = random.choice(humor_list)
@@ -88,11 +89,11 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
         messages,
         agent_messages,
         agent.system_prompt1,
-    "   - \nYou must remain in character as "+agent.agent_name+". You have the following personality traits and must respond accordingly: "+agent.trait_set+
+    "   - \nYou are "+agent.agent_name+". You have the following personality traits: "+agent.trait_set+
     "   - \nHere is a transcript of the audio:\n\n"+ audio_transcript_output +
     "   - \n\n**Instructions:**\n\n"+ additional_conversation_instructions +
-    "   - \nDo not mention any actions taken ('Here's my response: <action taken>', 'I will respond as XYZ agent', 'I say with a smirk', etc.)"
-    "   - \nYou must respond in 1 brief sentence with a special emphasis on "+humor+" the current situation."
+    "   - \n\nDo not mention any actions taken ('Here's my response: <action taken>', 'I will respond as XYZ agent', 'I say with a smirk', etc.)"
+    "   - \nYou must respond in 1 brief sentence with a special emphasis on briefly "+humor+" the current situation, with an extremely unexpected punchline."
     "   - \nFollow all of these instructions without mentioning them.",
         context_length=32000,
         temperature=1,
@@ -101,7 +102,7 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
         )
 
         # Fixed the text to handle latency issues.
-        generated_text_split, generated_text_fixed = check_sentence_length(generated_text, message_length=message_length, sentence_length=2)
+        generated_text_split, generated_text_fixed = check_sentence_length(generated_text, message_length=message_length, sentence_length=1)
         previous_agent = agent.agent_name
 
     # Do not activate Vector. Provide a response tailored to the user directly.
