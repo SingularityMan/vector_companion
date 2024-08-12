@@ -89,7 +89,7 @@ class Agent():
             "Content-Type": "application/json"
         }
 
-        if len(messages) > 30:
+        if len(messages) > 100:
             print("[MESSAGE LIMIT EXCEEDED. SUMMARRIZING CONVERSATION...]")
             messages = [{"role": "system", "content": system_prompt}]
             agent_messages, conversation_summary = self.summarize_conversation(agent_messages)
@@ -168,9 +168,9 @@ class VectorAgent():
                                "\n\nScreenshot\OCR description: "+screenshot_description+
                                "\n\nAudio Transcript Output: "+audio_transcript_output+
 
-                               "\n\nYour task will be separated between different category: "# the scope ranging from broad to narrow for each task:"
+                               "\n\nYour task will be the following: "# the scope ranging from broad to narrow for each task:"
 
-                               "\n\n[TASK, CONTEXT-ORIENTED]: Your task will be to generate 1 sentence containing key details of the current situation based on this context, highlighting the most important parts of the most recent situation while ignoring the lesser parts."
+                               "\n\nYour task will be to generate 1 sentence containing key details of the current situation based on this context, highlighting the most important parts of the most recent situation while ignoring the lesser parts."
                                "\nThe sentence needs to place a special emphasis on the event that is occurring right now so the agents can remain up to date."
 
                                #"\n\n[TASK 2, SECOND-MOST BROAD, OBJECTIVE-ORIENTED]: Your second task would be to set a one-sentence objective behind the scenes that augment the user's experience throughout the conversation."
@@ -192,7 +192,7 @@ class VectorAgent():
                 #"temperature": temperature,
                 #"top_p": top_p,
                 #"top_k": top_k,
-                "num_ctx": 32000
+                "num_ctx": 8000
                 #"num_predict": 250,
                 #"stop": []
                 }
@@ -428,7 +428,7 @@ def record_audio(audio, WAVE_OUTPUT_FILENAME, FORMAT, RATE, CHANNELS, CHUNK, REC
                             threading.Thread(target=view_image, args=(vision_model, processor)).start()
                         recording_started = True
                     frames.append(data)
-                    THRESHOLD = 300
+                    THRESHOLD = 150
                     silence_start = time.time()  # reset silence timer
                 elif recording_started:
                     if silence_start is None:
