@@ -23,6 +23,7 @@ from pydub import AudioSegment
 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 from ctypes import cast, POINTER
 from comtypes import CLSCTX_ALL, CoInitialize, CoUninitialize
+import math
 
 # Disable cuDNN autotuner
 torch.backends.cudnn.benchmark = False
@@ -93,16 +94,16 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
     "   - \nHere is a transcript of the audio:\n\n"+ audio_transcript_output +
     "   - \n\n**Instructions:**\n\n"+ additional_conversation_instructions +
     "   - \n\nDo not mention any actions taken ('Here's my response: <action taken>', 'I will respond as XYZ agent', 'I say with a smirk', etc.)"
-    "   - \nYou must respond in 1 brief sentence with a special emphasis on briefly "+humor+" the current situation, with an extremely unexpected punchline."
+    "   - \nYou must provide a novel brief response in the style of "+agent.trait_set+" with a special emphasis on the current situation."
     "   - \nFollow all of these instructions without mentioning them.",
-        context_length=32000,
+        context_length=4096,
         temperature=1,
         top_p=0.9,
         top_k=100000
         )
 
         # Fixed the text to handle latency issues.
-        generated_text_split, generated_text_fixed = check_sentence_length(generated_text, message_length=message_length, sentence_length=1)
+        generated_text_split, generated_text_fixed = check_sentence_length(generated_text, message_length=message_length, sentence_length=2)
         previous_agent = agent.agent_name
 
     # Do not activate Vector. Provide a response tailored to the user directly.
@@ -114,15 +115,17 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
         'Here is a description of the images/OCR you are viewing: \n\n' + screenshot_description + '\n\n'
         'Here is a transcript of the audio output:\n\n' + audio_transcript_output + '\n\n'
         'Here is the user\'s (Named: User) message: \n\n' + user_voice_output + '\n\n'
-        'Your agent name is '+agent.agent_name+
-        '\nRespond in 2 extremely brief, coherent, contextually relevant, 10-word sentence only addressing the user inquiry directly while remaining in character with your personality traits: '+agent.trait_set,
+        '\nRespond in '+str(round(math.cbrt(len(user_voice_output.split()))))+' contextually relevant sentences, with each sentence being no more than'+ str(len(user_voice_output.split()) // 2) +
+        'words long, only addressing the user inquiry directly with the following personality traits: '+agent.trait_set+''
+        '\nYou are required to give helpful, practical advice when needed, applying genuine suggestions according to the current situation.'
+        '\nFollow these instructions without mentioning them.',
         context_length=2048,
         temperature=0.5,
         top_p=top_p,
         top_k=2000
         )
 
-        generated_text_split, generated_text_fixed = check_sentence_length(generated_text, message_length=message_length, sentence_length=2)
+        generated_text_split, generated_text_fixed = check_sentence_length(generated_text, message_length=message_length, sentence_length=round(math.cbrt(len(user_voice_output.split()))))
         previous_agent = agent.agent_name
 
     # Add agent's response to chat history (messages) and message_dump.
