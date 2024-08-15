@@ -94,9 +94,9 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
     "   - \nHere is a transcript of the audio:\n\n"+ audio_transcript_output +
     "   - \n\n**Instructions:**\n\n"+ additional_conversation_instructions +
     "   - \n\nDo not mention any actions taken ('Here's my response: <action taken>', 'I will respond as XYZ agent', 'I say with a smirk', etc.)"
-    "   - \nYou must provide a novel brief response in the style of "+agent.trait_set+" with a special emphasis on the current situation."
+    "   - \nYou must provide a brief response with a special emphasis on the current situation."
     "   - \nFollow all of these instructions without mentioning them.",
-        context_length=4096,
+        context_length=(len(audio_transcript_output.split())*50)+(len(additional_conversation_instructions.split())*100),
         temperature=1,
         top_p=0.9,
         top_k=100000
@@ -119,13 +119,17 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
         'words long, only addressing the user inquiry directly with the following personality traits: '+agent.trait_set+''
         '\nYou are required to give helpful, practical advice when needed, applying genuine suggestions according to the current situation.'
         '\nFollow these instructions without mentioning them.',
-        context_length=2048,
+        context_length=(len(user_voice_output.split())*100),
         temperature=0.5,
         top_p=top_p,
-        top_k=2000
+        top_k=10000
         )
 
-        generated_text_split, generated_text_fixed = check_sentence_length(generated_text, message_length=message_length, sentence_length=round(math.cbrt(len(user_voice_output.split()))))
+        sentence_length = round(math.cbrt(len(user_voice_output.split())))
+        if sentence_length > 4:
+            sentence_length = 4
+
+        generated_text_split, generated_text_fixed = check_sentence_length(generated_text, message_length=message_length, sentence_length=sentence_length)
         previous_agent = agent.agent_name
 
     # Add agent's response to chat history (messages) and message_dump.
@@ -365,7 +369,7 @@ while True:
     # Check if an agent is responding.
     if not can_speak_event.is_set():
         print("Waiting for response to complete...")
-        time.sleep(1)
+        time.sleep(0.05)
         continue
 
     # Remove pre-existing screenshot inputs
