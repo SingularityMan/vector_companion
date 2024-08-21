@@ -90,11 +90,11 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
         messages,
         agent_messages,
         agent.system_prompt1,
-    "   - \nYou are "+agent.agent_name+". You have the following personality traits: "+agent.trait_set+
+    "   - \nYou are "+agent.agent_name+". You are a AI agent that essentially has the following personality traits: "+agent.trait_set+
     "   - \nHere is a transcript of the audio:\n\n"+ audio_transcript_output +
-    "   - \n\n**Instructions:**\n\n"+ additional_conversation_instructions +
+    "   - \n\n**Additional Context:**\n\n"+ additional_conversation_instructions +
     "   - \n\nDo not mention any actions taken ('Here's my response: <action taken>', 'I will respond as XYZ agent', 'I say with a smirk', etc.)"
-    "   - \nYou must provide a brief response with a special emphasis on the current situation."
+    "   - \nYou must provide a brief and completely unique, 2-sentence response with a special emphasis on the current situation."
     "   - \nFollow all of these instructions without mentioning them.",
         context_length=(len(audio_transcript_output.split())*50)+(len(additional_conversation_instructions.split())*100),
         temperature=1,
@@ -108,6 +108,15 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
 
     # Do not activate Vector. Provide a response tailored to the user directly.
     else:
+
+        # Modify response parameters based on user input length
+        sentence_length = round(math.cbrt(len(user_voice_output.split())))
+        if sentence_length > 4:
+            sentence_length = 4
+        context_length = (len(user_voice_output.split())*100)
+        if context_length > 8000:
+            context_length = 8000
+            
         messages, agent_messages, generated_text = agent.generate_text(
         messages,
         agent_messages,
@@ -115,19 +124,15 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
         'Here is a description of the images/OCR you are viewing: \n\n' + screenshot_description + '\n\n'
         'Here is a transcript of the audio output:\n\n' + audio_transcript_output + '\n\n'
         'Here is the user\'s (Named: User) message: \n\n' + user_voice_output + '\n\n'
-        '\nRespond in '+str(round(math.cbrt(len(user_voice_output.split()))))+' contextually relevant sentences, with each sentence being no more than'+ str(len(user_voice_output.split()) // 2) +
+        '\nRespond in '+str(sentence_length)+' contextually relevant sentences, with each sentence being no more than'+ str(len(user_voice_output.split()) // 2) +
         'words long, only addressing the user inquiry directly with the following personality traits: '+agent.trait_set+''
-        '\nYou are required to give helpful, practical advice when needed, applying genuine suggestions according to the current situation.'
+        '\nYou are required to give clear, concise, helpful, practical advice when needed, applying genuine suggestions according to the current situation.'
         '\nFollow these instructions without mentioning them.',
-        context_length=(len(user_voice_output.split())*100),
-        temperature=0.5,
+        context_length=2048,
+        temperature=0.7,
         top_p=top_p,
         top_k=10000
         )
-
-        sentence_length = round(math.cbrt(len(user_voice_output.split())))
-        if sentence_length > 4:
-            sentence_length = 4
 
         generated_text_split, generated_text_fixed = check_sentence_length(generated_text, message_length=message_length, sentence_length=sentence_length)
         previous_agent = agent.agent_name
@@ -251,20 +256,13 @@ previous_agent = ""
 # Prepare system prompt and options for both agents. System prompt 1 for each agent is the most up-to-date. System prompt 2 for each agent is deprecated and may be modified in the future.
 # System prompt 1 is used if the user doesn't speak within 60 seconds.
 # System prompt 2 is used when the user speaks.
-system_prompt_axiom1 = 'Your name is Axiom (Male).\n ' \
-                "\n\nYou must respond in character." \
-                "\nEach message, you will be provided with a set of contextual information from different sources. Your primary focus should be the most significant aspects of the contextual information." 
+system_prompt_axiom1 = 'Your name is Axiom (Male).\n ' 
                 
+system_prompt_axiom2 = 'Your name is Axiom (Male).\n '
 
-system_prompt_axiom2 = 'Your name is Axiom (Male).\n ' \
-                "\n\nYou must respond in character." \
-                "\nEach message, you will be provided with a set of contextual information from different sources. Your primary focus should be the most significant aspects of the contextual information."
+system_prompt_axis1 = 'Your name is Axis (Female).\n ' 
 
-system_prompt_axis1 = 'Your name is Axis (Female).\n ' \
-                "\nEach message, you will be provided with a set of contextual information from different sources. Your primary focus should be the most significant aspects of the contextual information." 
-
-system_prompt_axis2 = 'Your name is Axis (Female).\n ' \
-                "\nEach message, you will be provided with a set of contextual information from different sources. Your primary focus should be the most significant aspects of the contextual information."
+system_prompt_axis2 = 'Your name is Axis (Female).\n ' 
 
 # Deprecated
 personality_traits_axiom = "cocky, sassy, creative and witty"
