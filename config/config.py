@@ -58,7 +58,7 @@ class Agent():
         summary_prompt = "Provide an expository summary of this conversation in list format, highlighting the most significant events that occurred while being as objective as possible:\n\n" + "\n".join(agent_messages[-32000:])
 
         summary_payload = {
-            "model": "llama3.1:8b-instruct-fp16",
+            "model": "llama3.1:8b-instruct-q4_0",
             "messages": [{"role": "system", "content": "Summarize the conversation in list format."}, {"role": "user", "content": summary_prompt}],
             "stream": False,
             "options": {
@@ -95,7 +95,7 @@ class Agent():
             agent_messages, conversation_summary = self.summarize_conversation(agent_messages)
             messages.append({"role": "user", "content": conversation_summary})
             print("[CONVERSATION SUMMARY]:", conversation_summary)
-            context_length = 4096
+            #context_length = 4096
 
         messages[0] = {"role": "system", "content": system_prompt}
             
@@ -104,7 +104,7 @@ class Agent():
 
         # Define the payload
         payload = {
-            "model": "llama3.1:8b-instruct-fp16",
+            "model": "llama3.1:8b-instruct-q4_0",
             "messages": messages,
             "stream": False,
             "options":{
@@ -112,7 +112,11 @@ class Agent():
                 "temperature": temperature,
                 "top_p": top_p,
                 "top_k": top_k,
-                "num_ctx": context_length
+                "num_ctx": context_length,
+                "seed": random.randint(0, 2147483647),
+                "mirostat": 2,
+                "mirostat_eta": 0.1,
+                "mirostat_tau": 5
                 #"stop": []
                 }
         }
@@ -184,12 +188,12 @@ class VectorAgent():
 
         # Define the payload
         payload = {
-            "model": "llama3.1:8b-instruct-fp16",
+            "model": "llama3.1:8b-instruct-q4_0",
             "messages": agent_messages,
             "stream": False,
             "options":{
                 #"repeat_penalty": 1.20,
-                #"temperature": temperature,
+                "temperature": 0.5,
                 #"top_p": top_p,
                 #"top_k": top_k,
                 "num_ctx": 8000
@@ -246,12 +250,10 @@ def check_sentence_length(text, message_length=45, sentence_length=2):
     text = remove_repetitive_phrases(text)
 
     # Split sentences, but ignore ellipsis
-    sentences = re.split(r'(?:(?<=[.?;]))\s', text.strip())
+    sentences = re.split(r'(?:(?<=[.?;!]))\s', text.strip())
     #print("Sentences: ", sentences)
     if sentences:
         if len(sentences) > 1:
-            print("Sentence 1 length: ", len(sentences[0]))
-            print("Sentence 2 length: ", len(sentences[1]))
             return (sentences[:sentence_length], ' '.join(sentences[:sentence_length]))
         else:
             return sentences, sentences[0]
