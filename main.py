@@ -38,7 +38,7 @@ vision_model.to('cuda')
 model = whisper.load_model("base")
 
 # Load XTTS_v2
-tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2").to('cuda')
+tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True).to('cuda')
 
 '''# run_voice_response
 def run_voice_response():
@@ -94,7 +94,8 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
     "   - \nHere is a transcript of the audio:\n\n"+ audio_transcript_output +
     "   - \n\n**Additional Context:**\n\n"+ additional_conversation_instructions +
     "   - \n\nDo not mention any actions taken ('Here's my response: <action taken>', 'I will respond as XYZ agent', 'I say with a smirk', etc.)"
-    "   - \nYou must provide a brief and completely unique, 2-sentence response with a special emphasis on the current situation."
+    "   - \nYou must provide a brief, 2-sentence response with a special emphasis on the current situation and the previous agent's quoted message: \n\n'"+agent_messages[-1]+"'.\n"
+    "   - \nMake sure to address the previous agent directly in a podcast-style response."
     "   - \nFollow all of these instructions without mentioning them.",
         context_length=(len(audio_transcript_output.split())*50)+(len(additional_conversation_instructions.split())*100),
         temperature=1,
@@ -116,6 +117,8 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
         context_length = (len(user_voice_output.split())*100)
         if context_length > 8000:
             context_length = 8000
+
+        agent_trait_set = vectorAgent.gather_agent_traits(agent.trait_set)
             
         messages, agent_messages, generated_text = agent.generate_text(
         messages,
@@ -123,7 +126,7 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
         agent.system_prompt2,
         'Here is a description of the images/OCR you are viewing: \n\n' + screenshot_description + '\n\n'
         'Here is a transcript of the audio output:\n\n' + audio_transcript_output + '\n\n'
-        'Here is the user\'s (Named: User) message: \n\n' + user_voice_output + '\n\n'
+        'Here is the user\'s (Named: User, male) message: \n\n' + user_voice_output + '\n\n'
         '\nRespond in '+str(sentence_length)+' contextually relevant sentences, with each sentence being no more than'+ str(len(user_voice_output.split()) // 2) +
         'words long, only addressing the user inquiry directly with the following personality traits: '+agent.trait_set+''
         '\nYou are required to give clear, concise, helpful, practical advice when needed, applying genuine suggestions according to the current situation.'
@@ -276,7 +279,7 @@ agents_personality_traits = {
         ["witty", ["clever", "sharp", "quick-witted", "humorous", "playful", "smart", "amusing", "relatable", "teasing"]]
     ],
     "axis": [
-        ["intuitive", ["snarky", "taunting", "mischievous", "entertaining"]],
+        ["intuitive", ["attentive", "observant", "intuitive", "insightful"]],
         ["satirical", ["mocking", "sadistic", "sarcastic", "sharp-witted", "scintillating", "humorously morbid", "badass"]],
         ["witty", ["witty", "seductive", "charming", "sociable", "comical", "jocular", "ingenius"]]
     ]
@@ -428,13 +431,14 @@ while True:
 
         threads = []
         for agent in agents:
-            thread = threading.Thread(target=queue_agent_responses, args=(agent, user_voice_output, screenshot_description, audio_transcript_output))
-            thread.start()
-            threads.append(thread)
+            queue_agent_responses(agent, user_voice_output, screenshot_description, audio_transcript_output)
+            #thread = threading.Thread(target=queue_agent_responses, args=(agent, user_voice_output, screenshot_description, audio_transcript_output))
+            #thread.start()
+            #threads.append(thread)
 
         # Wait for all threads to complete
-        for thread in threads:
-            thread.join()
+        """for thread in threads:
+            thread.join()"""
 
         # Add agent's response to the dialogue list
         for agent in agents:
