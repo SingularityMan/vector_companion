@@ -36,7 +36,7 @@ They transcribe audio output and user microphone input simultaneously while peri
 
 **Note:** This framework is designed to run on Windows only.
 
-- Minimum 36GB VRAM required to run the entire framework on `llama3.1-instruct-fp16` (uses up 16GB VRAM, recommended 48GB VRAM for gaming, streaming, etc.). You may swap out the model in `config/config.py` in the `generate_text` and `summarize_text` methods under the `Agent` and `VectorAgent` classes if you would like to lower the VRAM usage or replace the model with a larger one.
+- Minimum 26GB VRAM required to run the entire framework on `llama3.1-instruct-Q_4`. You may swap out the model in `config/config.py` in the `generate_text` and `summarize_text` methods under the `Agent` and `VectorAgent` classes if you would like to lower the VRAM usage or replace the model with a larger one.
 - You will need a `torch` version compatible with your CUDA version installed.
 - You need to install Ollama if you haven't already and download `llama3.1:8b-instruct-fp16` or whichever model you'd like to use in Ollama.
 - You need VB Cable installed on your PC in order for Python to listen to your own PC.
