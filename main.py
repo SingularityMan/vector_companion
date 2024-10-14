@@ -29,9 +29,12 @@ import math
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
 
+# Florence-2-large-ft path
+vision_path = r"C:\Users\carlo\.cache\huggingface\hub\models--microsoft--Florence-2-large-ft\snapshots\bb44b80c15e943b1bf7cec6e076359cec6e40178"
+
 # Vision model: florence-2-large-ft
-vision_model = AutoModelForCausalLM.from_pretrained("microsoft/Florence-2-large-ft", trust_remote_code=True)
-processor = AutoProcessor.from_pretrained("microsoft/Florence-2-large-ft", trust_remote_code=True)
+vision_model = AutoModelForCausalLM.from_pretrained(vision_path, trust_remote_code=True)
+processor = AutoProcessor.from_pretrained(vision_path, trust_remote_code=True)
 vision_model.to('cuda')
 
 # Load Whisper Model
@@ -61,7 +64,7 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
         chosen_adjective = random.choice(adjective)
         agent.trait_set.append(chosen_adjective)
         
-    agent.trait_set = " ".join(agent.trait_set)
+    agent.trait_set = ", ".join(agent.trait_set)
 
     # Activate Vector if user didn't speak.
     # Vector controls the conversation between Axiom and Axis
@@ -83,28 +86,56 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
                     "Roasting",
                     "self-deprecating"
                 ]
+
+        agent_prompt_list = [
+            
+            # Rhetorical Question and Subtle Personality Shift
+            "You are "+agent.agent_name+". Your personality traits are: "+agent.trait_set+". In three sentences, respond to the previous agent by posing a rhetorical question that challenges or deepens the conversation, while subtly shifting one of your personality traits (e.g., from sarcastic to contemplative). Keep the focus on the current situation, and avoid mentioning any instructions or actions.",
+
+            # Contrasting Opinion with Adaptive Style
+            "You are "+agent.agent_name+". With personality traits: "+agent.trait_set+", provide a three-sentence response that offers a contrasting opinion to the previous agent, using a different language style (e.g., poetic, blunt, technical). Focus on the current situation, and let your personality traits guide your tone without overemphasizing them. Avoid mentioning instructions or actions.",
+
+            # Empathetic Response with Subtle Humor
+            "You are "+agent.agent_name+". Expressing: "+agent.trait_set+", respond to the previous agent in three sentences with empathy towards the situation, subtly infusing humor into your response. Maintain a balance between seriousness and lightheartedness, keeping your personality traits evident but not overwhelming. Do not mention instructions or actions.",
+
+            # Hypothetical Scenario with Subtle Challenge
+            "You are "+agent.agent_name+". Expressing: "+agent.trait_set+", propose a hypothetical scenario related to the current situation in three sentences. Use this scenario to subtly challenge the previous agent's perspective. Keep your tone engaging and thought-provoking, and avoid mentioning instructions or actions.",
+
+            # Brief Analytical Insight with Adaptive Tone
+            "You are "+agent.agent_name+". With personality traits: "+agent.trait_set+", provide a concise analytical insight about the current situation in three sentences. Adjust your tone to mirror the mood of the conversation, whether it's serious, tense, or relaxed. Do not mention any instructions or actions, and ensure your response is distinct from earlier ones.",
+
+            # Express Curiosity with Emotional Nuance
+            "You are "+agent.agent_name+". Your personality traits are: "+agent.trait_set+". In three sentences, express genuine curiosity about an aspect of the current situation, allowing an emotional nuance (e.g., excitement, skepticism) to color your response. Maintain focus on the topic and avoid mentioning any instructions or actions.",
+            
+            # Subtle Humor with Contextual Twist
+            "You are "+agent.agent_name+". With personality traits: "+agent.trait_set+", craft a three-sentence response that incorporates subtle humor and introduces an unexpected twist related to the context. Keep your tone light yet meaningful, and avoid mentioning instructions or actions.",
+
+            # Direct Response with Layered Meaning
+            "You are "+agent.agent_name+". Your personality traits are: "+agent.trait_set+". In three sentences, provide a direct response to the previous agent that carries a layered meaning or double entendre related to the current situation. Ensure your personality traits guide your tone, and refrain from mentioning any instructions or actions."
+        ]
         
         humor = random.choice(humor_list)
+
+        context_length = (len(audio_transcript_output.split())*50)+(len(additional_conversation_instructions.split())*100)
+        if context_length > 8000:
+            context_length = 8000
+
+        agent_prompt = random.choice(agent_prompt_list)
     
         messages, agent_messages, generated_text = agent.generate_text(
-        messages,
-        agent_messages,
-        agent.system_prompt1,
-    "   - \nYou are "+agent.agent_name+". You are a AI agent that essentially has the following personality traits: "+agent.trait_set+
-    "   - \nHere is a transcript of the audio:\n\n"+ audio_transcript_output +
-    "   - \n\n**Additional Context:**\n\n"+ additional_conversation_instructions +
-    "   - \n\nDo not mention any actions taken ('Here's my response: <action taken>', 'I will respond as XYZ agent', 'I say with a smirk', etc.)"
-    "   - \nYou must provide a brief, 2-sentence response with a special emphasis on the current situation and the previous agent's quoted message: \n\n'"+agent_messages[-1]+"'.\n"
-    "   - \nMake sure to address the previous agent directly in a podcast-style response."
-    "   - \nFollow all of these instructions without mentioning them.",
-        context_length=(len(audio_transcript_output.split())*50)+(len(additional_conversation_instructions.split())*100),
-        temperature=1,
-        top_p=0.9,
-        top_k=100000
+            messages,
+            agent_messages,
+            agent.system_prompt1,
+            agent_prompt+"\n\nHere is a transcript of the audio: \n\n'"+audio_transcript_output+"'\n\nAdditional contextual information: "+additional_conversation_instructions,
+            context_length=8000,
+            temperature=0.85,  # Increased to amplify unpredictability
+            top_p=0.95,  # Slightly higher top_p for broader creativity
+            top_k=0  # Disable top_k for the widest range of possibilities
         )
 
+
         # Fixed the text to handle latency issues.
-        generated_text_split, generated_text_fixed = check_sentence_length(generated_text, message_length=message_length, sentence_length=2)
+        generated_text_split, generated_text_fixed = check_sentence_length(generated_text, message_length=message_length, sentence_length=3)
         previous_agent = agent.agent_name
 
     # Do not activate Vector. Provide a response tailored to the user directly.
@@ -124,14 +155,16 @@ def queue_agent_responses(agent, user_voice_output, screenshot_description, audi
         messages,
         agent_messages,
         agent.system_prompt2,
+        'You are '+agent.agent_name+'. You are a relatable, convincing, human being who speaks casually that essentially sounds completely natural.'
         'Here is a description of the images/OCR you are viewing: \n\n' + screenshot_description + '\n\n'
         'Here is a transcript of the audio output:\n\n' + audio_transcript_output + '\n\n'
         'Here is the user\'s (Named: User, male) message: \n\n' + user_voice_output + '\n\n'
         '\nRespond in '+str(sentence_length)+' contextually relevant sentences, with each sentence being no more than'+ str(len(user_voice_output.split()) // 2) +
         'words long, only addressing the user inquiry directly with the following personality traits: '+agent.trait_set+''
         '\nYou are required to give clear, concise, helpful, practical advice when needed, applying genuine suggestions according to the current situation.'
+        '\nMake sure to sound conversational, natural and fluid as possible.'
         '\nFollow these instructions without mentioning them.',
-        context_length=2048,
+        context_length=8000,
         temperature=0.7,
         top_p=top_p,
         top_k=10000
@@ -274,17 +307,23 @@ personality_traits_axis = "intuitive, observant, cynical, original, edgy and sar
 # Define agent personality traits. These are shuffled each time an agent responds. Helps increase variety.
 agents_personality_traits = {
     "axiom": [
-        ["cocky", ["arrogant", "confident", "brash", "bold", "overconfident", "conceited", "self-assured", "upbeat"]],
-        ["sassy", ["spirited", "badass", "cheeky", "lively", "saucy", "feisty", "impertinent", "spunky"]],
-        ["witty", ["clever", "sharp", "quick-witted", "humorous", "playful", "smart", "amusing", "relatable", "teasing"]]
+        ["cocky", ["cocky"]],
+        ["sassy", ["witty"]],
+        ["witty", ["specializes in dark humor"]],
+        ["blunt", ["unapologetically blunt"]],
+        ["chaotic", ["chaotic"]],
+        ["unfiltered", ["unfiltered"]],
+        ["controversial", ["controversial"]]
     ],
     "axis": [
-        ["intuitive", ["attentive", "observant", "intuitive", "insightful"]],
-        ["satirical", ["mocking", "sadistic", "sarcastic", "sharp-witted", "scintillating", "humorously morbid", "badass"]],
-        ["witty", ["witty", "seductive", "charming", "sociable", "comical", "jocular", "ingenius"]]
+        ["intuitive", ["intuitive"]],
+        ["satirical", ["sarcastic"]],
+        ["witty", ["wildly extreme"]],
+        ["detached", ["detached"]],
+        ["provocative", ["provocative"]],
+        ["troublemaker", ["troublemaker"]]
     ]
 }
-
 
 # Deprecated
 temperature = 0.3
