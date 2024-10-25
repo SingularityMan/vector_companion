@@ -31,7 +31,7 @@ torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
 
 # Vision, Audio, Speech Generation Models
-vision_path = r"C:\Users\carlo\.cache\huggingface\hub\models--microsoft--Florence-2-large-ft\snapshots\bb44b80c15e943b1bf7cec6e076359cec6e40178"
+vision_path = r"microsoft/Florence-2-large-ft"
 vision_model = AutoModelForCausalLM.from_pretrained(vision_path, trust_remote_code=True)
 processor = AutoProcessor.from_pretrained(vision_path, trust_remote_code=True)
 vision_model.to('cuda')
