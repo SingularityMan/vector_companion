@@ -339,6 +339,7 @@ agent_messages = [message["content"] for message in messages if message.get("rol
 if len(agent_messages) == 0:
     agent_messages = [""]
 
+# Memory feature. Agent remembers User's personality traits.
 if os.path.exists("user_memory.json"):
     with open("user_memory.json", 'r') as f:
         user_memory = json.load(f)
