@@ -70,7 +70,7 @@ class Agent():
         summary_prompt = "Provide an expository summary of this conversation in list format, highlighting the most significant events that occurred while being as objective as possible:\n\n" + "\n".join(agent_messages[-32000:])
 
         summary_payload = {
-            "model": "llama3.1:8b-instruct-q4_0",
+            "model": "llama3.1:8b-instruct-fp16",
             "messages": [{"role": "system", "content": "Summarize the conversation in list format."}, {"role": "user", "content": summary_prompt}],
             "stream": False,
             "options": {
@@ -149,7 +149,7 @@ class Agent():
         messages.append({"role": "user", "content": user_input})
 
         payload = {
-            "model": "llama3.1:8b-instruct-q4_0",
+            "model": "llama3.1:8b-instruct-fp16",
             "messages": messages,
             "stream": False,
             "options":{
@@ -241,7 +241,7 @@ class VectorAgent():
                                "\n\nComplete this task without mentioning it in any way. No acknowledgement, no offer of assistance, nothing. Just do it."})
 
         payload = {
-            "model": "llama3.1:8b-instruct-q4_0",
+            "model": "llama3.1:8b-instruct-fp16",
             "messages": messages,
             "stream": False,
             "options":{
@@ -276,12 +276,12 @@ def find_repeated_words(text: str, threshold: int = 6) -> str:
     word_counts.clear()
     return " ".join(filtered_words)
 
-def remove_repetitive_phrases(text: str) -> Tuple[list, str]:
+def remove_repetitive_phrases(text: str) -> str:
     pattern = re.compile(r'(\b\w+\b(?:\s+\b\w+\b){0,4})(?:\s+\1)+', re.IGNORECASE)
     result = pattern.sub(r'\1', text)
     return result
 
-def check_sentence_length(text: str, sentence_length: int = 2) -> Tuple[list, str]:
+def check_sentence_length(text: str, sentence_length: int = 2) -> Union[Tuple[List[str], str], str]:
     text = remove_repetitive_phrases(text)
     sentences = re.split(r'(?:(?<=[.?;!]))\s', text.strip())
     if sentences:
