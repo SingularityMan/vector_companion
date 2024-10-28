@@ -70,7 +70,7 @@ class Agent():
         summary_prompt = "Provide an expository summary of this conversation in list format, highlighting the most significant events that occurred while being as objective as possible:\n\n" + "\n".join(agent_messages[-32000:])
 
         summary_payload = {
-            "model": "llama3.1:8b-instruct-fp16",
+            "model": "llama3.1:8b-instruct-q4_0",
             "messages": [{"role": "system", "content": "Summarize the conversation in list format."}, {"role": "user", "content": summary_prompt}],
             "stream": False,
             "options": {
@@ -149,7 +149,7 @@ class Agent():
         messages.append({"role": "user", "content": user_input})
 
         payload = {
-            "model": "llama3.1:8b-instruct-fp16",
+            "model": "llama3.1:8b-instruct-q4_0",
             "messages": messages,
             "stream": False,
             "options":{
@@ -241,7 +241,7 @@ class VectorAgent():
                                "\n\nComplete this task without mentioning it in any way. No acknowledgement, no offer of assistance, nothing. Just do it."})
 
         payload = {
-            "model": "llama3.1:8b-instruct-fp16",
+            "model": "llama3.1:8b-instruct-q4_0",
             "messages": messages,
             "stream": False,
             "options":{
