@@ -10,7 +10,7 @@ from datetime import datetime
 import subprocess
 import threading
 import base64
-from typing import Any, List, Tuple, Optional
+from typing import Any, List, Tuple, Optional, Union
 
 import whisper
 import pyaudio
@@ -38,7 +38,7 @@ class Agent():
     The class is responsible for generating a text response and summarizing the chat history when appropriate.
     """
 
-    def __init__(self, agent_name, agent_gender, personality_traits, system_prompt1, system_prompt2, dialogue_list):
+    def __init__(self, agent_name, agent_gender, personality_traits, system_prompt1, system_prompt2, dialogue_list, language_model):
         self.agent_name = agent_name
         self.agent_gender = agent_gender
         self.system_prompt1 = system_prompt1
@@ -47,6 +47,7 @@ class Agent():
         self.personality_traits = personality_traits
         self.trait_set = []
         self.dialogue_list = dialogue_list
+        self.language_model = language_model
 
     def summarize_conversation(self, agent_messages: list, context_length: int) -> Tuple[list, str]:
 
@@ -70,7 +71,7 @@ class Agent():
         summary_prompt = "Provide an expository summary of this conversation in list format, highlighting the most significant events that occurred while being as objective as possible:\n\n" + "\n".join(agent_messages[-32000:])
 
         summary_payload = {
-            "model": "llama3.1:8b-instruct-q4_0",
+            "model": self.language_model,
             "messages": [{"role": "system", "content": "Summarize the conversation in list format."}, {"role": "user", "content": summary_prompt}],
             "stream": False,
             "options": {
@@ -84,7 +85,7 @@ class Agent():
         if response.status_code == 200:
             response_data = response.json()
             text_response = response_data.get("message", {}).get("content", "No response received")
-            agent_messages.append(text_response)
+            agent_messages.append("["+self.agent_name+"]"+": \n\n"+text_response)
             return agent_messages, text_response
         else:
             print("Failed to get a summary response. Status code:", response.status_code)
@@ -149,7 +150,7 @@ class Agent():
         messages.append({"role": "user", "content": user_input})
 
         payload = {
-            "model": "llama3.1:8b-instruct-q4_0",
+            "model": self.language_model,
             "messages": messages,
             "stream": False,
             "options":{
@@ -188,7 +189,8 @@ class VectorAgent():
     The agent will be in charge of summarizing the immediate context and synthesizing contextual information.
     """
 
-    def __init__(self):
+    def __init__(self, language_model):
+        self.language_model = language_model
         pass
 
     def gather_agent_traits(self, agent_traits: list) -> str:
@@ -241,7 +243,7 @@ class VectorAgent():
                                "\n\nComplete this task without mentioning it in any way. No acknowledgement, no offer of assistance, nothing. Just do it."})
 
         payload = {
-            "model": "llama3.1:8b-instruct-q4_0",
+            "model": self.language_model,
             "messages": messages,
             "stream": False,
             "options":{
@@ -339,7 +341,7 @@ def view_image(vision_model: Any, processor: Any):
             pixel_values=inputs["pixel_values"].cuda(),
             max_new_tokens=1000,
             do_sample=True,
-            num_beams=10
+            num_beams=1
         )
 
         generated_ids.to('cpu')
@@ -353,7 +355,7 @@ def view_image(vision_model: Any, processor: Any):
         with open("screenshot_description.txt", "a", encoding='utf-8') as f:
             f.write(f"\n\nScreenshot Contents at {current_time.strftime('%H:%M:%S')}: \n\n"+parsed_answer['<MORE_DETAILED_CAPTION>'])
 
-        view_image_ocr(vision_model, processor)
+        #view_image_ocr(vision_model, processor)
 
         image_lock = False
     except Exception as e:
