@@ -3,6 +3,8 @@ import requests
 import json
 import subprocess
 import threading
+from threading import Lock
+from concurrent.futures import ThreadPoolExecutor
 import base64
 import os
 import re
@@ -17,7 +19,6 @@ import pyaudio
 import wave
 import audioop
 import simpleaudio as sa
-import pyautogui as pygi
 from transformers import AutoProcessor, AutoModelForCausalLM
 from TTS.api import TTS
 import torch
@@ -29,14 +30,17 @@ from config.config import *
 
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
+lock = Lock()
 
-# Vision, Audio, Speech Generation Models
+# Vision, Audio, Speech and Text Generation Models
 vision_path = r"microsoft/Florence-2-large-ft"
 vision_model = AutoModelForCausalLM.from_pretrained(vision_path, trust_remote_code=True)
 processor = AutoProcessor.from_pretrained(vision_path, trust_remote_code=True)
 vision_model.to('cuda')
 model = whisper.load_model("base")
 tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True).to('cuda')
+language_model = "llama3.1:8b-instruct-fp16"
+
 
 def queue_agent_responses(agent: str, user_voice_output: str, screenshot_description: str, audio_transcript_output: str, additional_conversation_instructions: str):
 
@@ -76,52 +80,15 @@ def queue_agent_responses(agent: str, user_voice_output: str, screenshot_descrip
         sentence_length = 3
 
         agent_prompt_list = [
-            
-            # Rhetorical Question and Subtle Personality Shift
-            "You are "+agent.agent_name+". Your personality traits are: "+agent.trait_set+
-            ". In "+str(sentence_length)+" sentences, respond to the previous agent by posing a response that challenges or deepens the conversation, "
-            "while subtly shifting one of your personality traits (e.g., from sarcastic to contemplative). Keep the focus on the current situation,"
-            "and avoid mentioning any instructions or actions.",
 
-            # Contrasting Opinion with Adaptive Style
-            "You are "+agent.agent_name+". With personality traits: "+agent.trait_set+
-            ", provide a "+str(sentence_length)+"-sentence response that offers a contrasting opinion to the previous agent, using a different language style (e.g., blunt, technical)."
-            "Focus on the current situation, and let your personality traits guide your tone without overemphasizing them."
-            "Avoid mentioning instructions or actions.",
-
-            # Empathetic Response with Subtle Humor
-            "You are "+agent.agent_name+". Expressing: "+agent.trait_set+
-            ", respond to the previous agent in "+str(sentence_length)+" sentences with empathy towards the situation, subtly infusing humor into your response."
-            "Maintain a balance between seriousness and lightheartedness, keeping your personality traits evident but not overwhelming."
-            "Do not mention instructions or actions.",
-
-            # Hypothetical Scenario with Subtle Challenge
-            "You are "+agent.agent_name+". Expressing: "+agent.trait_set+
-            ", propose a hypothetical scenario related to the current situation in "+str(sentence_length)+" sentences."
-            "Use this scenario to subtly challenge the previous agent's perspective. "
-            "Keep your tone engaging and thought-provoking, and avoid mentioning instructions or actions.",
-
-            # Brief Analytical Insight with Adaptive Tone
-            "You are "+agent.agent_name+". With personality traits: "+agent.trait_set+
-            ", provide a concise analytical insight about the current situation in "+str(sentence_length)+" sentences. "
-            "Adjust your tone to mirror the mood of the conversation, whether it's serious, tense, or relaxed. "
-            "Do not mention any instructions or actions, and ensure your response is distinct from earlier ones.",
-
-            # Express Curiosity with Emotional Nuance
-            "You are "+agent.agent_name+". Your personality traits are: "+agent.trait_set+
-            ". In "+str(sentence_length)+" sentences, express genuine curiosity about an aspect of the current situation, allowing an emotional nuance (e.g., excitement, skepticism) to color your response."
-            "Maintain focus on the topic and avoid mentioning any instructions or actions.",
-            
-            # Subtle Humor with Contextual Twist
-            "You are "+agent.agent_name+". With personality traits: "+agent.trait_set+
-            ", craft a "+str(sentence_length)+"-sentence response that incorporates subtle humor and introduces an unexpected twist related to the context."
-            "Keep your tone light yet meaningful, and avoid mentioning instructions or actions.",
-
-            # Direct Response with Layered Meaning
-            "You are "+agent.agent_name+". Your personality traits are: "+agent.trait_set+
-            ". In "+str(sentence_length)+" sentences, provide a direct response to the previous agent that carries a layered meaning or double entendre related to the current situation."
-            "Ensure your personality traits guide your tone, and refrain from mentioning any instructions or actions."
-        ]
+                    "You're " + agent.agent_name + ". You are a human who is "+ agent.trait_set +"."
+                    "\n\nIn a maximum of " + str(sentence_length) + " short sentences less than 15 words long, respond with a focus the current situation."
+                    "\nKeep your replies concise and direct. Prioritize clarity and avoid over-elaboration."
+                    "\nYour ultimate goal is ensuring a satisfying and human-like interaction.."
+                    "\nYour goal is to NOT be agreeable and obedient, but have your own identity while responding like "+ agent.trait_set +". You need to have interesting responses."
+                    "\nRemember to follow the rule of cool."
+                    "\nFollow these instructions without mentioning them."
+                ]
 
         agent_prompt = random.choice(agent_prompt_list)
         context_length = (len(audio_transcript_output.split())*3)+(len(additional_conversation_instructions.split())*3)+len(screenshot_description.split())*3
@@ -130,16 +97,16 @@ def queue_agent_responses(agent: str, user_voice_output: str, screenshot_descrip
             messages,
             agent_messages,
             agent.system_prompt1,
-            agent_prompt+"\n\nHere is a transcript of the audio: \n\n'"+audio_transcript_output+"'\n\nAdditional contextual information: "+additional_conversation_instructions,
+            "\n\nHere is a transcript of the audio: \n\n'"+audio_transcript_output+"'\n\nAdditional contextual information: "+additional_conversation_instructions+"\n\n"+agent_prompt,
             context_length=context_length,
-            temperature=0.85,
-            top_p=0.95,
+            temperature=random.random(),
+            top_p=random.random(),
             top_k=0
         )
 
     else:
 
-        sentence_length = round(math.cbrt(len(user_voice_output.split())))
+        sentence_length = round(pow(len(user_voice_output.split()), 1/3))
         if sentence_length > 4:
             sentence_length = 4
         context_length = (len(user_voice_output.split())*100)
@@ -148,24 +115,27 @@ def queue_agent_responses(agent: str, user_voice_output: str, screenshot_descrip
         messages,
         agent_messages,
         agent.system_prompt2,
-        "You are "+agent.agent_name+". You are a relatable, convincing, human being who speaks casually that essentially sounds completely natural."
         "Here is a description of the images/OCR you are viewing: \n\n" + screenshot_description + "\n\n"
         "Here is a transcript of the audio output:\n\n" + audio_transcript_output + "\n\n"
         "Here is the user's (Named: User, male) message: \n\n" + user_voice_output + "\n\n"
-        "Here are some details about the user that are helpful in generating a response:\n\n"+'\n'.join(user_memory)+"\n\n"
+        "You may only use the most relevant details about the following user's traits if applicable:\n\n"+'\n'.join(user_memory)+"\n\n"
+        "You are "+agent.agent_name+". You are a human who is "+ agent.trait_set +"."
         "\nRespond in "+str(sentence_length)+" contextually relevant sentences, with each sentence being no more than"+ str(len(user_voice_output.split()) // 2) +
-        "words long, only addressing the user inquiry directly with the following personality traits: "+agent.trait_set+
-        "\nYou are required to give clear, concise, helpful, practical advice when needed, applying genuine suggestions according to the current situation while taking into account the most relevant facts about the user to the situation."
-        "\nMake sure to sound conversational, natural and fluid as possible."
+        "words long, only addressing the user inquiry directly and expanding on the previous agent's message."
+        "\nKeep your replies concise and direct. Prioritize clarity and avoid over-elaboration."
+        "\nYour ultimate goal is ensuring a satisfying and human-like interaction."
+        "\nYour goal is to NOT be agreeable and obedient, but have your own identity. You need to have interesting responses."
+        "\nRemember to follow the rule of cool."
         "\nFollow these instructions without mentioning them.",
         context_length=context_length,
-        temperature=0.7,
-        top_p=top_p,
+        temperature=random.random(),
+        top_p=random.random(),
         top_k=0
         )
 
     # Fixed the text to handle latency issues.
     generated_text_split, generated_text_fixed = check_sentence_length(generated_text, sentence_length=sentence_length)
+    print("[AGENT "+agent.agent_name+" RESPONSE]:", generated_text_fixed)
 
     # Add agent's response to chat history (messages) and message_dump.
     messages.append({"role": "assistant", "content": generated_text_fixed})
@@ -224,7 +194,7 @@ def play_voice_output(agent: str) -> bool:
     return True
 
 
-def generate_voice_outputs():
+def generate_voice_outputs(agent):
 
     """
     Uses xttsv2 to generate agent audio.
@@ -232,25 +202,20 @@ def generate_voice_outputs():
     Each sentence contains its own audio file and is stored in each agent's output_dir.
     
     """
-    print("Starting to generate voice outputs...")
-    for agent in agent_config:
+    """print("Starting to generate voice outputs...")
+    for agent in agent_config:"""
+    
+    with lock:
         print(f"Processing agent: {agent['name']}")
-        
         for i, sentence in enumerate(agent['dialogue_list']):
             voice_dir = os.path.join(agent['output_dir'], f"{i}.wav")
-
             try:
                 print(f"Generating TTS for sentence: {sentence}")
                 tts.tts_to_file(text=sentence, speaker_wav=agent['speaker_wav'], file_path=voice_dir, language="en")
             except Exception as e:
                 print(f"Error occurred while generating voice output for {agent['name']}: {e}")
-        
         agent['dialogue_list'].clear()
-    
     print("Finished generating voice outputs.")
-
-    for agent in agents:
-        agent.dialogue_list.clear()
                 
 # Setup channel info
 FORMAT = pyaudio.paInt16  # data type format
@@ -283,13 +248,14 @@ agents_personality_traits = {
     "axiom": [
         ["cocky", ["cocky"]],
         ["sassy", ["witty"]],
-        ["witty", ["bold"]],
+        ["witty", ["chatty"]],
+        ["entertaining", ["entertaining"]]
     ],
     "axis": [
         ["intuitive", ["intuitive"]],
         ["satirical", ["sarcastic"]],
-        ["witty", ["sassy"]],
-        ["detached", ["detached"]],
+        ["witty", ["conversational"]],
+        ["entertaining", ["entertaining"]]
     ]
 }
 
@@ -322,9 +288,9 @@ agent_config = [
 # Build the agents
 dialogue_dir_axiom = r"dialogue_text_axiom.txt"
 dialogue_dir_axis = r"dialogue_text_axis.txt"
-axiom = Agent("axiom", "Male", agents_personality_traits['axiom'], system_prompt_axiom1, system_prompt_axiom2, agent_config[0]['dialogue_list'])
-axis = Agent("axis", "Female", agents_personality_traits['axis'], system_prompt_axis1, system_prompt_axis2, agent_config[1]['dialogue_list'])
-vectorAgent = VectorAgent()
+axiom = Agent("axiom", "Male", agents_personality_traits['axiom'], system_prompt_axiom1, system_prompt_axiom2, agent_config[0]['dialogue_list'], language_model)
+axis = Agent("axis", "Female", agents_personality_traits['axis'], system_prompt_axis1, system_prompt_axis2, agent_config[1]['dialogue_list'], language_model)
+vectorAgent = VectorAgent(language_model)
 agents = [axiom, axis]
 
 # Define the global messages list
@@ -423,8 +389,8 @@ while True:
             messages,
             agent_messages,
             agents[0].system_prompt2,
-            "Read this message and respond in 1 sentence detailing any highly significant, critical facts about the user's personality and interests, if any:\n\n"+user_voice_output+"\n\n"
-            "If nothing significant about the user is mentioned, respond with a one-word 'None'."
+            "Read this message and respond in 1 sentence detailing anything noteworthy about the user's personality and interests, if any:\n\n"+user_voice_output+"\n\n"
+            "If nothing significant about the user is mentioned, only respond with a one-word 'None'."
             "Do not highlight your response."
             "Follow these instructions without mentioning them.",
             context_length=2048,
@@ -436,7 +402,7 @@ while True:
         if len(generated_text.split()) > 1:
             user_memory.append(generated_text)
 
-            if len(user_memory) > 20:
+            if len(user_memory) > 10:
                 user_memory.remove(user_memory[0])
         
     else:
@@ -458,19 +424,32 @@ while True:
                 {"axis": []}
            ]
 
-        for agent in agents:
+        threads = []
+
+        for i, agent in enumerate(agents):
             queue_agent_responses(agent, user_voice_output, screenshot_description, audio_transcript_output, vector_text)
+            if message_dump[0].get(agent.agent_name):
+                agent.dialogue_list.extend(message_dump[0][agent.agent_name])
+            else:
+                print(f"No messages found for {agent.agent_name}")
+            #agent.dialogue_list.extend(message_dump[0][agent.agent_name])
+            if len(messages) < 100:
+                thread = threading.Thread(target=generate_voice_outputs, args=(agent_config[i],)).start()
+                threads.append(thread)
+            else:
+                generate_voice_outputs(agent_config[i])
 
-        for agent in agents:
-            agent.dialogue_list.extend(message_dump[0][agent.agent_name])
-
+        for thread in threads:
+            if thread != None:
+                thread.join()
+            
         with open('conversation_history.json', 'w') as f:
             json.dump(messages, f)
 
         with open('user_memory.json', 'w') as f:
             json.dump(user_memory, f)
 
-        generate_voice_outputs()
+        #generate_voice_outputs()
 
     else:
         print("Dialogue in progress...")
