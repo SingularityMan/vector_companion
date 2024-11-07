@@ -32,6 +32,9 @@ torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
 lock = Lock()
 
+# Event to signal when user recording is complete
+recording_complete_event = threading.Event()
+
 # Vision, Audio, Speech and Text Generation Models
 vision_path = r"microsoft/Florence-2-large-ft"
 vision_model = AutoModelForCausalLM.from_pretrained(vision_path, trust_remote_code=True)
@@ -39,7 +42,7 @@ processor = AutoProcessor.from_pretrained(vision_path, trust_remote_code=True)
 vision_model.to('cuda')
 model = whisper.load_model("base")
 tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True).to('cuda')
-language_model = "llama3.1:8b-instruct-fp16"
+language_model = "llama3.2:3b-instruct-fp16"
 
 
 def queue_agent_responses(agent: str, user_voice_output: str, screenshot_description: str, audio_transcript_output: str, additional_conversation_instructions: str):
@@ -77,25 +80,26 @@ def queue_agent_responses(agent: str, user_voice_output: str, screenshot_descrip
 
     if user_voice_output == "":
 
-        sentence_length = 3
+        sentence_length = random.randrange(2,4)
 
         agent_prompt_list = [
 
                     "You're " + agent.agent_name + ". You are a human who is "+ agent.trait_set +"."
-                    "\n\nIn a maximum of " + str(sentence_length) + " short sentences less than 15 words long, respond with a focus the current situation."
+                    "\n\nIn a maximum of " + str(sentence_length) + " short sentences less than 15 words long, respond with a focus the current situation without mentioning the user."
                     "\nKeep your replies concise and direct. Prioritize clarity and avoid over-elaboration."
-                    "\nYour ultimate goal is ensuring a satisfying and human-like interaction.."
-                    "\nYour goal is to NOT be agreeable and obedient, but have your own identity while responding like "+ agent.trait_set +". You need to have interesting responses."
+                    "\nYour ultimate goal is to sound as cool and badass as possible while immersed inside the environment and avoiding cheesy, cliche and cringeworthy lines."
+                    "\nYour goal is to NOT be agreeable and obedient, but have your own identity while responding in the style of "+ agent.trait_set +". You need to have interesting responses."
                     "\nRemember to follow the rule of cool."
+                    "\nDo not include quotation marks."
                     "\nFollow these instructions without mentioning them."
                 ]
 
         agent_prompt = random.choice(agent_prompt_list)
-        context_length = (len(audio_transcript_output.split())*3)+(len(additional_conversation_instructions.split())*3)+len(screenshot_description.split())*3
+        context_length = (len(audio_transcript_output.split())*2)+(len(additional_conversation_instructions.split())*2)+len(screenshot_description.split())*2
     
         messages, agent_messages, generated_text = agent.generate_text(
-            messages,
-            agent_messages,
+            messages[-10:],
+            agent_messages[-10:],
             agent.system_prompt1,
             "\n\nHere is a transcript of the audio: \n\n'"+audio_transcript_output+"'\n\nAdditional contextual information: "+additional_conversation_instructions+"\n\n"+agent_prompt,
             context_length=context_length,
@@ -112,13 +116,13 @@ def queue_agent_responses(agent: str, user_voice_output: str, screenshot_descrip
         context_length = (len(user_voice_output.split())*100)
             
         messages, agent_messages, generated_text = agent.generate_text(
-        messages,
-        agent_messages,
+        messages[-5:],
+        agent_messages[-5:],
         agent.system_prompt2,
         "Here is a description of the images/OCR you are viewing: \n\n" + screenshot_description + "\n\n"
         "Here is a transcript of the audio output:\n\n" + audio_transcript_output + "\n\n"
         "Here is the user's (Named: User, male) message: \n\n" + user_voice_output + "\n\n"
-        "You may only use the most relevant details about the following user's traits if applicable:\n\n"+'\n'.join(user_memory)+"\n\n"
+        "You may only use the most relevant details about the following user but only if they're relevant:\n\n"+'\n'.join(user_memory)+"\n\n"
         "You are "+agent.agent_name+". You are a human who is "+ agent.trait_set +"."
         "\nRespond in "+str(sentence_length)+" contextually relevant sentences, with each sentence being no more than"+ str(len(user_voice_output.split()) // 2) +
         "words long, only addressing the user inquiry directly and expanding on the previous agent's message."
@@ -135,11 +139,51 @@ def queue_agent_responses(agent: str, user_voice_output: str, screenshot_descrip
 
     # Fixed the text to handle latency issues.
     generated_text_split, generated_text_fixed = check_sentence_length(generated_text, sentence_length=sentence_length)
-    print("[AGENT "+agent.agent_name+" RESPONSE]:", generated_text_fixed)
 
-    # Add agent's response to chat history (messages) and message_dump.
-    messages.append({"role": "assistant", "content": generated_text_fixed})
+    # Remove repeated sentences from agent_messages[-2] and regenerate them
+    agent_previous_response = agent_messages[-2] if len(agent_messages) >= 2 else ""
+
+    for idx, sentence in enumerate(generated_text_split):
+        words_in_sentence = sentence.split()
+        common_word_count = sum(1 for word in words_in_sentence if word in agent_previous_response)
+
+        if common_word_count >= len(words_in_sentence) / 2:
+            _, _, regenerated_sentence = agent.generate_text(
+                messages=messages[-3:],
+                agent_messages=agent_messages[-3:],
+                system_prompt="",
+                user_input=f"Regenerate a similar sentence to this one less than 10 words long: \n\n'{sentence}'\n\n follow these instructions without mentioning them.",
+                context_length=1028,  # Extremely small context length
+                temperature=0.8,    # Slightly higher temperature for more variability
+                top_p=0.9,
+                top_k=0
+            )
+            # Replace the current sentence with the regenerated one
+            generated_text_split[idx] = regenerated_sentence.strip()
+
+    generated_text_split = list(filter(lambda word: len(word.split()) > 2, generated_text_split))
+    filter_phrases = {"I cannot", "I can't", "I'm unable", "I'm not able", "I can assist you further instead.", "Is there anything else", "Can I help you with"}
+    generated_text_split = [word for word in generated_text_split if not any(phrase in word for phrase in filter_phrases)]
+    
+    final_generated_text = " ".join(generated_text_split)
+
+    print("[AGENT " + agent.agent_name + " RESPONSE]:", final_generated_text)
+
+    # Replace the last message in agent_messages with the final generated text
+    if len(agent_messages) >= 1:
+        agent_messages[-1] = final_generated_text
+    else:
+        agent_messages.append(final_generated_text)
+
+    # Add or replace agent's response in chat history (messages)
+    if len(messages) > 1 and messages[-1]["role"] == "assistant":
+        messages[-1]["content"] = final_generated_text
+    else:
+        messages.append({"role": "assistant", "content": final_generated_text})
+
+    # Update the message_dump for tracking purposes
     message_dump[0][agent.agent_name] = generated_text_split
+
 
 def voice_output_async():
 
@@ -248,15 +292,16 @@ agents_personality_traits = {
     "axiom": [
         ["cocky", ["cocky"]],
         ["sassy", ["witty"]],
-        ["witty", ["chatty"]],
-        ["entertaining", ["entertaining"]]
+        ["witty", ["badass"]],
+        ["competitive", ["competitive"]]
     ],
     "axis": [
         ["intuitive", ["intuitive"]],
         ["satirical", ["sarcastic"]],
-        ["witty", ["conversational"]],
-        ["entertaining", ["entertaining"]]
-    ]
+        ["witty", ["sassy"]],
+        ["bold", ["bold"]],
+        ["competitive", ["competitive"]]
+    ],
 }
 
 # Deprecated
@@ -309,8 +354,6 @@ if len(agent_messages) == 0:
 if os.path.exists("user_memory.json"):
     with open("user_memory.json", 'r') as f:
         user_memory = json.load(f)
-    for memory in user_memory:
-        print(memory)
 else:
     user_memory = [""]
 
@@ -359,10 +402,25 @@ while True:
 
     audio_transcriptions = ""
 
-    record_audio_dialogue = threading.Thread(target=record_audio_output, args=(audio, AUDIO_TRANSCRIPT_FILENAME, FORMAT, CHANNELS, RATE, 1024, 30, file_index_count))
+    random_record_seconds = random.randint(5,5)
+    print("Recording for {} seconds".format(random_record_seconds))
+    record_audio_dialogue = threading.Thread(target=record_audio_output, args=(audio, AUDIO_TRANSCRIPT_FILENAME, FORMAT, CHANNELS, RATE, 1024, random_record_seconds, file_index_count))
     record_audio_dialogue.start()
 
-    record_voice = record_audio(audio, WAVE_OUTPUT_FILENAME, FORMAT, RATE, CHANNELS, CHUNK, RECORD_SECONDS*file_index_count, THRESHOLD, SILENCE_LIMIT, vision_model, processor)
+    record_voice = record_audio(
+        audio,
+        WAVE_OUTPUT_FILENAME,
+        FORMAT,
+        RATE,
+        CHANNELS,
+        CHUNK,
+        #RECORD_SECONDS*file_index_count,
+        random_record_seconds*file_index_count,
+        THRESHOLD,
+        SILENCE_LIMIT,
+        vision_model,
+        processor
+        )
     record_audio_dialogue.join()
 
     with open("screenshot_description.txt", 'r', encoding='utf-8') as f:
@@ -389,11 +447,12 @@ while True:
             messages,
             agent_messages,
             agents[0].system_prompt2,
-            "Read this message and respond in 1 sentence detailing anything noteworthy about the user's personality and interests, if any:\n\n"+user_voice_output+"\n\n"
+            "Read this message and respond in 1 sentence noting any significant facts about the user, if any:\n\n"+user_voice_output+"\n\n"
             "If nothing significant about the user is mentioned, only respond with a one-word 'None'."
+            "You must take note of anything substantial, not just superficial things."
             "Do not highlight your response."
             "Follow these instructions without mentioning them.",
-            context_length=2048,
+            context_length=1000,
             temperature=0.1,
             top_p=0.1,
             top_k=0,
@@ -402,20 +461,22 @@ while True:
         if len(generated_text.split()) > 1:
             user_memory.append(generated_text)
 
-            if len(user_memory) > 10:
+            if len(user_memory) > 5:
                 user_memory.remove(user_memory[0])
         
     else:
         print("No user voice output transcribed")
         user_voice_output = ""
 
-    if user_voice_output.strip() == "":
+    """if user_voice_output.strip() == "" and random_record_seconds == 30:
         vector_text = vectorAgent.generate_text(
             messages,
             screenshot_description,
             audio_transcript_output,
             context_length=2048
         )
+    elif random_record_seconds < 30:"""
+    vector_text = "Here is the screenshot description: "+screenshot_description
 
     if not can_speak_event.is_set():
         
@@ -434,11 +495,12 @@ while True:
                 print(f"No messages found for {agent.agent_name}")
             #agent.dialogue_list.extend(message_dump[0][agent.agent_name])
             if len(messages) < 100:
-                thread = threading.Thread(target=generate_voice_outputs, args=(agent_config[i],)).start()
+                thread = threading.Thread(target=generate_voice_outputs, args=(agent_config[i],))
                 threads.append(thread)
+                thread.start()
             else:
                 generate_voice_outputs(agent_config[i])
-
+        
         for thread in threads:
             if thread != None:
                 thread.join()

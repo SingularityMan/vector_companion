@@ -258,6 +258,7 @@ class VectorAgent():
             response_data = response.json()
             text_response = response_data.get("message", {}).get("content", "No response received")
             text_response = re.sub(r'"', '', text_response)
+            text_response = re.sub(r"\'", "", text_response)
             text_response = re.sub(r'[^\x00-\x7F]+', '', text_response)
             text_response = re.sub(r'\(.*?\)', '', text_response)
             text_response = re.sub(r'\*.*?\*', '', text_response)
@@ -293,7 +294,7 @@ def check_sentence_length(text: str, sentence_length: int = 2) -> Union[Tuple[Li
             return sentences, sentences[0]
     return "No valid text found."
 
-def remove_repetitive_phrases(text: str, max_repeats: int = 3) -> str:
+"""def remove_repetitive_phrases(text: str, max_repeats: int = 3) -> str:
     words = text.split()
     result = []
     i = 0
@@ -308,7 +309,7 @@ def remove_repetitive_phrases(text: str, max_repeats: int = 3) -> str:
                 break
         result.extend(phrase * min(count, max_repeats))
         i += len(phrase) * count
-    return ' '.join(result)
+    return ' '.join(result)"""
 
 #----------------------------------------IMAGE PROCESSING----------------------------------------------#
 
@@ -451,11 +452,13 @@ def record_audio(
             while True:
                 
                 if not can_speak_event.is_set():
-                    print("Cancelling recording, agent is speaking.")
-                    stream.stop_stream()
-                    stream.close()
                     time.sleep(0.25)
-                    return False
+                    if not can_speak_event.is_set():
+                        print("Cancelling recording, agent is speaking.")
+                        stream.stop_stream()
+                        stream.close()
+                        
+                        return False
 
                 try:
                     data = stream.read(CHUNK, exception_on_overflow=False)
@@ -464,6 +467,8 @@ def record_audio(
                     continue
 
                 rms = audioop.rms(data, 2)  # width=2 for format=paInt16
+
+                #print("[NOT SPEAKING]:", rms)
                 if ii < int(RATE / CHUNK * RECORD_SECONDS):
                     ii += 1
                     if ii % (int(RATE / CHUNK)/15) == 0:
@@ -472,7 +477,7 @@ def record_audio(
                             image_picture = pygi.screenshot("axiom_screenshot.png")
                             threading.Thread(target=view_image, args=(vision_model, processor)).start()
 
-                if rms >= THRESHOLD or (ii >= int(RATE / CHUNK * RECORD_SECONDS)):
+                if rms >= THRESHOLD: #(ii >= int(RATE / CHUNK * RECORD_SECONDS)):
                     silence_start = time.time()
                     if not recording_started:
                         SILENCE_LIMIT = 1
@@ -483,6 +488,10 @@ def record_audio(
                             threading.Thread(target=view_image, args=(vision_model, processor)).start()
                         THRESHOLD = 150
                         recording_started = True
+                    elif rms >= THRESHOLD and recording_started:
+                        #print(f"[CONTINUING TO SPEAK]:", rms)
+                        silence_start = time.time()
+                        can_speak_event.set()
                 if rms < THRESHOLD and recording_started:
                     if time.time() - silence_start > SILENCE_LIMIT:
                         print("finished recording")
@@ -623,7 +632,7 @@ def transcribe_audio(model: Any, WAVE_OUTPUT_FILENAME: str, RATE: int = 16000) -
 
     _, probs = model.detect_language(mel)
     detected_language = max(probs, key=probs.get)
-    print(f"Detected language: {detected_language}")
+    #print(f"Detected language: {detected_language}")
 
     if 'en' not in detected_language:
         return ""
@@ -632,7 +641,7 @@ def transcribe_audio(model: Any, WAVE_OUTPUT_FILENAME: str, RATE: int = 16000) -
     task="transcribe",
     prompt=None,
     prefix=None,
-    suppress_blank=False,
+    suppress_blank=True,
     fp16=True  
     )
 
@@ -647,7 +656,7 @@ def transcribe_audio(model: Any, WAVE_OUTPUT_FILENAME: str, RATE: int = 16000) -
         user_voice_output = ""
         return user_voice_output
     
-    if len(user_voice_output.split()) <= 3:
+    if len(user_voice_output.split()) <= 5:
         user_voice_output = ""
     
     # Print the recognized text
