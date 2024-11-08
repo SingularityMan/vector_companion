@@ -26,8 +26,8 @@ They transcribe audio output and user microphone input simultaneously while peri
 ## Features
 
 - Can view images periodically, captioning images and reading text via OCR.
-- Can hear and transcribe computer audio in real-time (English only due to base model size Whisper language limitations).
-- Can hear user microphone input in real-time (English only due to base model size Whisper language limitations).
+- Can hear and transcribe computer audio in real-time (English only due to base model size Whisper language limitations but you may replace base with WhisperV3 Turbo for multilingual support).
+- Can hear user microphone input in real-time (English only due to base model size Whisper language limitations but you may replace base with WhisperV3 Turbo for multilingual support).
 - Voice Cloning enables distinct voice output generation for agents Axiom and Axis.
 
 ## Installation
@@ -36,9 +36,9 @@ They transcribe audio output and user microphone input simultaneously while peri
 
 **Note:** This framework is designed to run on Windows only.
 
-- Minimum 26GB VRAM required to run the entire framework on `llama3.1-instruct-Q_4`. You may swap out the model in `config/config.py` in the `generate_text` and `summarize_text` methods under the `Agent` and `VectorAgent` classes if you would like to lower the VRAM usage or replace the model with a larger one.
+- Minimum 20GB VRAM required to run the entire framework on `gemma2:2b-instruct-q8_0`. You may swap out the model in the `language_model` variable in `main.py` if you would like to lower the VRAM usage or replace the model with a larger one.
 - You will need a `torch` version compatible with your CUDA version installed.
-- You need to install Ollama if you haven't already and download `llama3.1:8b-instruct-fp16` or whichever model you'd like to use in Ollama.
+- You need to install Ollama if you haven't already and download `gemma2:2b-instruct-q8_0` or whichever model you'd like to use in Ollama.
 - You need VB Cable installed on your PC in order for Python to listen to your own PC.
 
 ### Cloning
@@ -130,6 +130,19 @@ def record_audio(audio, WAVE_OUTPUT_FILENAME, FORMAT, RATE, CHANNELS, CHUNK, REC
             frames = []
             image_path = None
 ```
+# Installing flash_attn on Windows
+### Installing Microsoft Visual Studio Code 
+Install Microsoft Visual Studio Code's latest version (2022) that is compatible with your CUDA version (12.2 or greater) and in the installer, make sure to include these capabilities:
+   - MSVC v143 - VS 2022 C++ x64/x86 build tools (x86 & x84)
+   - C++ CMake Tools for Windows
+   - Windows 10 or Windows 11 SDK, depending on your Windows OS
+
+### Installing Torch/Cuda
+After that, install a version of `torch` compatible with your CUDA version that is compatible with MSVC.
+
+### Building flash_attn from source
+Lastly, make sure to carefully edit then run `flash-attn-clone-source-compile-stable-torch.bat` in order to build flash_attn from source. Make sure to edit the file to compile flash_attn for a version compatible with your torch/CUDA and your python version.
+
 ### Contributing
 Contributions are welcome! You may follow our [contribution](CONTRIBUTING.md) guides here.
 
