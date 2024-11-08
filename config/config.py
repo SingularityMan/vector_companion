@@ -452,7 +452,7 @@ def record_audio(
             while True:
                 
                 if not can_speak_event.is_set():
-                    time.sleep(0.25)
+                    time.sleep(0.05)
                     if not can_speak_event.is_set():
                         print("Cancelling recording, agent is speaking.")
                         stream.stop_stream()
@@ -486,7 +486,7 @@ def record_audio(
                         if not image_lock:
                             print("[SCREENSHOT TAKEN]", ii)
                             threading.Thread(target=view_image, args=(vision_model, processor)).start()
-                        THRESHOLD = 150
+                        THRESHOLD = 100
                         recording_started = True
                     elif rms >= THRESHOLD and recording_started:
                         #print(f"[CONTINUING TO SPEAK]:", rms)
@@ -642,7 +642,7 @@ def transcribe_audio(model: Any, WAVE_OUTPUT_FILENAME: str, RATE: int = 16000) -
     prompt=None,
     prefix=None,
     suppress_blank=True,
-    fp16=True  
+    fp16=True,
     )
 
     result = whisper.decode(model, mel, options)
@@ -655,9 +655,6 @@ def transcribe_audio(model: Any, WAVE_OUTPUT_FILENAME: str, RATE: int = 16000) -
         print("Error:", e)
         user_voice_output = ""
         return user_voice_output
-    
-    if len(user_voice_output.split()) <= 5:
-        user_voice_output = ""
     
     # Print the recognized text
     print(user_voice_output)
