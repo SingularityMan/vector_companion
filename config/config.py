@@ -11,6 +11,7 @@ import subprocess
 import threading
 import base64
 from typing import Any, List, Tuple, Optional, Union
+import logging
 
 import whisper
 import pyaudio
@@ -21,6 +22,7 @@ from PIL import Image
 import pyautogui as pygi
 from transformers import AutoProcessor, AutoModelForCausalLM
 import soundfile as sf
+import torch
 
 config_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -340,7 +342,7 @@ def view_image(vision_model: Any, processor: Any):
         generated_ids = vision_model.generate(
             input_ids=inputs["input_ids"].cuda(),
             pixel_values=inputs["pixel_values"].cuda(),
-            max_new_tokens=1000,
+            max_new_tokens=500,
             do_sample=True,
             num_beams=1
         )
@@ -486,7 +488,7 @@ def record_audio(
                         if not image_lock:
                             print("[SCREENSHOT TAKEN]", ii)
                             threading.Thread(target=view_image, args=(vision_model, processor)).start()
-                        THRESHOLD = 100
+                        THRESHOLD = 150
                         recording_started = True
                     elif rms >= THRESHOLD and recording_started:
                         #print(f"[CONTINUING TO SPEAK]:", rms)
@@ -606,7 +608,7 @@ def record_audio_output(
 
         frames = []
 
-def transcribe_audio(model: Any, WAVE_OUTPUT_FILENAME: str, RATE: int = 16000) -> str:
+def transcribe_audio(model: Any, model_name, WAVE_OUTPUT_FILENAME: str, RATE: int = 16000) -> str:
 
     """
     Transcribes audio via whisper
@@ -627,8 +629,9 @@ def transcribe_audio(model: Any, WAVE_OUTPUT_FILENAME: str, RATE: int = 16000) -
 
     max_audio_length = 30 * RATE
     audio_data = audio_data[:max_audio_length]
-
-    mel = whisper.log_mel_spectrogram(audio_data).to(model.device)
+    
+    n_mels = 128 if 'turbo' in model_name or 'large' in model_name else 80
+    mel = whisper.log_mel_spectrogram(audio_data, n_mels=n_mels).to(model.device)
 
     _, probs = model.detect_language(mel)
     detected_language = max(probs, key=probs.get)
