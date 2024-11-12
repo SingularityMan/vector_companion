@@ -637,11 +637,12 @@ def transcribe_audio(model: Any, model_name, WAVE_OUTPUT_FILENAME: str, RATE: in
     detected_language = max(probs, key=probs.get)
     #print(f"Detected language: {detected_language}")
 
-    if 'en' not in detected_language:
+    if 'en' not in detected_language and ('turbo' not in model_name and 'large' not in model_name):
         return ""
 
     options = whisper.DecodingOptions(
-    task="transcribe",
+    task="translate",
+    language="en",
     prompt=None,
     prefix=None,
     suppress_blank=True,
