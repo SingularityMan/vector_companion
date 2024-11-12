@@ -40,7 +40,7 @@ vision_path = r"microsoft/Florence-2-large-ft"
 vision_model = AutoModelForCausalLM.from_pretrained(vision_path, trust_remote_code=True)
 processor = AutoProcessor.from_pretrained(vision_path, trust_remote_code=True)
 vision_model.to('cuda')
-model_name = "base" # Replace this with whichever whisper model you'd like.
+model_name = "turbo" # Replace this with whichever whisper model you'd like.
 model = whisper.load_model(model_name)
 tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True).to('cuda')
 language_model = "gemma2:2b-instruct-q8_0"
@@ -87,8 +87,9 @@ def queue_agent_responses(agent: str, user_voice_output: str, screenshot_descrip
         agent_prompt_list = [
 
                     "You're " + agent.agent_name + ". You have the following traits: "+ agent.trait_set +"."
-                    "\n\nRespond in a maximum of " + str(sentence_length) + " sentences with a hyperfocus on the context of the current situation and the previous agent's response."
-                    "\nKeep your responses realistic, placing special emphasis on making fun of the actions and events currently taking place."
+                    "\n\nRespond in a maximum of " + str(sentence_length) + " sentences with a focus on the context of the current situation and the previous agent's response."
+                    "\nKeep your responses realistic and intersting, and directly related to the current situation while keeping your personality traits."
+                    "\nFocus on the audio transcript output more than anything else."
                     "\nDo not mention the user, nor the screenshots. Act like you're inside the situation as an observer, avoid breaking immersion or mentioning the user."
                     "\nDo not include quotation marks nor emojis and do not repeat yourself."
                     "\nDo not describe any gestures made."
@@ -104,9 +105,9 @@ def queue_agent_responses(agent: str, user_voice_output: str, screenshot_descrip
             agent.system_prompt1,
             "\n\nHere is a transcript of the audio: \n\n'"+audio_transcript_output+"'\n\nAdditional contextual information: "+additional_conversation_instructions+"\n\n"+agent_prompt,
             context_length=context_length,
-            temperature=0.7,
+            temperature=0.9,
             top_p=0.9,
-            top_k=1000
+            top_k=0
         )
 
     else:
@@ -123,7 +124,7 @@ def queue_agent_responses(agent: str, user_voice_output: str, screenshot_descrip
         "Here is a description of the images/OCR you are viewing: \n\n" + screenshot_description + "\n\n"
         "Here is a transcript of the audio output:\n\n" + audio_transcript_output + "\n\n"
         "Here is the user's (Named: User, male) message: \n\n" + user_voice_output + "\n\n"
-        "Here are some facts about the user:\n\n"+'\n'.join(user_memory)+"\n\n"
+        #"Here are some facts about the user:\n\n"+'\n'.join(user_memory)+"\n\n"
         "You are "+agent.agent_name+". You have the following traits: "+ agent.trait_set +"."
         "\nRespond in "+str(sentence_length)+" sentences, with each sentence being no more than "+ str(len(user_voice_output.split()) // 2) +
         "words long, with the goal of responding to the user's inquiry."
@@ -322,12 +323,14 @@ agents_personality_traits = {
     "axiom": [
         ["cocky", ["cocky"]],
         ["sassy", ["witty"]],
-        ["witty", ["badass"]]
+        ["witty", ["badass", "action-oriented"]],
+        ["funny", ["satirical", "humorous", "playful", "blunt"]]
     ],
     "axis": [
         ["intuitive", ["intuitive"]],
         ["satirical", ["sarcastic"]],
-        ["witty", ["sassy"]]
+        ["witty", ["sassy", "snarky", "passive-aggressive"]],
+        ["funny", ["edgy", "humorously dark", "controversial", "provocative"]]
     ],
 }
 
@@ -429,7 +432,7 @@ while True:
 
     audio_transcriptions = ""
 
-    random_record_seconds = random.randint(5,30)
+    random_record_seconds = random.randint(5,20)
     print("Recording for {} seconds".format(random_record_seconds))
     record_audio_dialogue = threading.Thread(target=record_audio_output, args=(audio, AUDIO_TRANSCRIPT_FILENAME, FORMAT, CHANNELS, RATE, 1024, random_record_seconds, file_index_count))
     record_audio_dialogue.start()
