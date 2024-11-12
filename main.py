@@ -40,7 +40,7 @@ vision_path = r"microsoft/Florence-2-large-ft"
 vision_model = AutoModelForCausalLM.from_pretrained(vision_path, trust_remote_code=True)
 processor = AutoProcessor.from_pretrained(vision_path, trust_remote_code=True)
 vision_model.to('cuda')
-model_name = "turbo" # Replace this with whichever whisper model you'd like.
+model_name = "base" # Replace this with whichever whisper model you'd like.
 model = whisper.load_model(model_name)
 tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True).to('cuda')
 language_model = "gemma2:2b-instruct-q8_0"
