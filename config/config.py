@@ -9,10 +9,14 @@ from bs4 import BeautifulSoup
 from datetime import datetime
 import subprocess
 import threading
+import queue
 import base64
-from typing import Any, List, Tuple, Optional, Union
+from typing import Any, List, Tuple, Optional, Union, AsyncGenerator
 import logging
+import asyncio
 
+import ollama
+import aiohttp
 import whisper
 import pyaudio
 import wave
@@ -26,10 +30,9 @@ import torch
 
 config_dir = os.path.dirname(os.path.realpath(__file__))
 
-can_speak_event = threading.Event()
-can_speak_event.set()
-
 #------------------------------------------TEXT PROCESSING-----------------------------------------------------------#
+
+
 
 class Agent():
 
@@ -40,7 +43,7 @@ class Agent():
     The class is responsible for generating a text response and summarizing the chat history when appropriate.
     """
 
-    def __init__(self, agent_name, agent_gender, personality_traits, system_prompt1, system_prompt2, dialogue_list, language_model):
+    def __init__(self, agent_name, agent_gender, personality_traits, system_prompt1, system_prompt2, dialogue_list, language_model, speaker_wav):
         self.agent_name = agent_name
         self.agent_gender = agent_gender
         self.system_prompt1 = system_prompt1
@@ -50,6 +53,76 @@ class Agent():
         self.trait_set = []
         self.dialogue_list = dialogue_list
         self.language_model = language_model
+        self.speaker_wav = speaker_wav
+
+    async def generate_text_stream(
+    self,
+    messages: list,
+    agent_messages: list,
+    system_prompt: str,
+    user_input: str,
+    context_length: int = 32000,
+    temperature: float = 0.7,
+    top_p: float = 0.3,
+    top_k: int = 10000
+) -> Tuple[List, List, AsyncGenerator[str, None]]:
+        """
+        Generates a text response as a stream using ollama.chat.
+        Returns an asynchronous generator yielding sentences.
+        """
+        if len(messages) > 100:
+            print("[MESSAGE LIMIT EXCEEDED. SUMMARIZING CONVERSATION...]")
+            messages = [{"role": "system", "content": system_prompt}]
+            agent_messages, conversation_summary = self.summarize_conversation(agent_messages, 32000)
+            messages.append({"role": "user", "content": conversation_summary})
+            print("[CONVERSATION SUMMARY]:", conversation_summary)
+
+        messages[0] = {"role": "system", "content": system_prompt}
+        messages.append({"role": "user", "content": user_input})
+
+        async def fetch_stream():
+            loop = asyncio.get_event_loop()
+            buffer = ''
+
+            def run_chat():
+                return ollama.chat(
+                    model=self.language_model,
+                    messages=messages,
+                    stream=True,
+                    options={
+                        "repeat_penalty": 1.15,
+                        "temperature": temperature,
+                        "top_p": top_p,
+                        "top_k": top_k,
+                        "num_ctx": context_length,
+                        "seed": random.randint(0, 2147483647)
+                    }
+                )
+
+            # Run ollama.chat in the executor to prevent blocking the event loop
+            stream = await loop.run_in_executor(None, run_chat)
+
+            for chunk in stream:
+                content = chunk.get('message', {}).get('content', '')
+                if content:
+                    buffer += content
+                    sentences, buffer = split_buffer_into_sentences(buffer)
+                    for sentence in sentences:
+                        # Clean up the sentence
+                        sentence = clean_text(sentence)
+                        # Append to messages and agent_messages
+                        messages.append({"role": "assistant", "content": sentence})
+                        agent_messages.append(f"Agent Name:{self.agent_name}, ({self.agent_gender})\nAgent Response: {sentence}")
+                        yield sentence
+
+            # Handle any remaining buffer
+            if buffer.strip():
+                buffer = clean_text(buffer)
+                messages.append({"role": "assistant", "content": buffer})
+                agent_messages.append(f"Agent Name:{self.agent_name}, ({self.agent_gender})\nAgent Response: {buffer}")
+                yield buffer
+
+        return messages, agent_messages, fetch_stream()
 
     def summarize_conversation(self, agent_messages: list, context_length: int) -> Tuple[list, str]:
 
@@ -272,6 +345,52 @@ class VectorAgent():
             print("Response:", response.text)
             return "Failed to get a response."
 
+def split_buffer_into_sentences(buffer):
+    """
+    Splits buffer into sentences and returns the remaining buffer.
+    """
+    sentence_endings = re.compile(r'([.!?])')
+    sentences = []
+    while True:
+        match = sentence_endings.search(buffer)
+        if match:
+            end = match.end()
+            sentence = buffer[:end].strip()
+            sentences.append(sentence)
+            buffer = buffer[end:]
+        else:
+            break
+    return sentences, buffer
+
+def clean_text(text):
+    """
+    Cleans the text by removing unwanted characters and patterns.
+    """
+    text = re.sub(r'"', '', text)
+    text = re.sub(r'[^\x00-\x7F]+', '', text)
+    text = re.sub(r'\(.*?\)', '', text)
+    text = re.sub(r'\*.*?\*', '', text)
+    text = text.replace('\\n', '')
+    return text.strip()
+
+async def synthesize_sentence(tts, sentence, speaker_wav):
+    """
+    Asynchronously synthesizes a sentence and returns the audio data.
+    """
+    try:
+        # Preprocess the sentence to remove problematic characters
+        sentence = sentence.strip().strip("'\"")
+        sentence = re.sub(r'[\'\"]', '', sentence)
+
+        loop = asyncio.get_event_loop()
+        # Synthesize the sentence using GPU
+        audio = await loop.run_in_executor(
+            None, lambda: tts.tts(text=sentence, speaker_wav=speaker_wav, language="en")
+        )
+        return audio
+    except Exception as e:
+        print(f"Error during TTS synthesis for sentence '{sentence}': {e}")
+        return None
 
 def find_repeated_words(text: str, threshold: int = 6) -> str:
     pattern = r'\b(\w+)\b'
@@ -295,23 +414,6 @@ def check_sentence_length(text: str, sentence_length: int = 2) -> Union[Tuple[Li
         else:
             return sentences, sentences[0]
     return "No valid text found."
-
-"""def remove_repetitive_phrases(text: str, max_repeats: int = 3) -> str:
-    words = text.split()
-    result = []
-    i = 0
-    while i < len(words):
-        phrase = [words[i]]
-        count = 1
-        for j in range(1, len(words) - i):
-            if words[i:i+j] == words[i+j:i+2*j]:
-                phrase = words[i:i+j]
-                count += 1
-            else:
-                break
-        result.extend(phrase * min(count, max_repeats))
-        i += len(phrase) * count
-    return ' '.join(result)"""
 
 #----------------------------------------IMAGE PROCESSING----------------------------------------------#
 
@@ -420,7 +522,8 @@ def record_audio(
     THRESHOLD: int,
     SILENCE_LIMIT: int,
     vision_model: str,
-    processor: str
+    processor: str,
+    can_speak_event: bool
     ) -> Optional[bool]:
 
     global image_lock
@@ -529,7 +632,8 @@ def record_audio_output(
                         RATE: int,
                         CHUNK: int,
                         RECORD_SECONDS: int,
-                        file_index_count: int
+                        file_index_count: int,
+                        can_speak_event: bool,
                         ):
 
     file_index = 0
