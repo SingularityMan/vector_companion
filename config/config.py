@@ -15,6 +15,7 @@ from typing import Any, List, Tuple, Optional, Union, AsyncGenerator
 import logging
 import asyncio
 
+import numpy as np
 import ollama
 import aiohttp
 import whisper
@@ -65,7 +66,7 @@ class Agent():
     temperature: float = 0.7,
     top_p: float = 0.3,
     top_k: int = 10000
-) -> Tuple[List, List, AsyncGenerator[str, None]]:
+    ) -> Tuple[List, List, AsyncGenerator[str, None]]:
         """
         Generates a text response as a stream using ollama.chat.
         Returns an asynchronous generator yielding sentences.
@@ -83,6 +84,7 @@ class Agent():
         async def fetch_stream():
             loop = asyncio.get_event_loop()
             buffer = ''
+            complete_response = ''  # To hold the entire concatenated output
 
             def run_chat():
                 return ollama.chat(
@@ -110,17 +112,20 @@ class Agent():
                     for sentence in sentences:
                         # Clean up the sentence
                         sentence = clean_text(sentence)
-                        # Append to messages and agent_messages
-                        messages.append({"role": "assistant", "content": sentence})
-                        agent_messages.append(f"Agent Name:{self.agent_name}, ({self.agent_gender})\nAgent Response: {sentence}")
+                        complete_response += sentence + ' '  # Concatenate to the complete response
                         yield sentence
 
             # Handle any remaining buffer
             if buffer.strip():
                 buffer = clean_text(buffer)
-                messages.append({"role": "assistant", "content": buffer})
-                agent_messages.append(f"Agent Name:{self.agent_name}, ({self.agent_gender})\nAgent Response: {buffer}")
-                yield buffer
+                complete_response += buffer + ' '  # Add remaining buffer to the complete response
+
+            # Append the complete response as a single message
+            complete_response = complete_response.strip()
+            messages.append({"role": "assistant", "content": complete_response})
+            agent_messages.append(
+                f"Agent Name:{self.agent_name}, ({self.agent_gender})\nAgent Response: {complete_response}"
+            )
 
         return messages, agent_messages, fetch_stream()
 
@@ -432,6 +437,8 @@ def view_image(vision_model: Any, processor: Any):
 
         image_lock = True
 
+        time.sleep(3)
+
         prompt = "<MORE_DETAILED_CAPTION>"
 
         #image_picture = pygi.screenshot("axiom_screenshot.png")
@@ -446,7 +453,7 @@ def view_image(vision_model: Any, processor: Any):
             pixel_values=inputs["pixel_values"].cuda(),
             max_new_tokens=500,
             do_sample=True,
-            num_beams=1
+            num_beams=10
         )
 
         generated_ids.to('cpu')
@@ -585,7 +592,7 @@ def record_audio(
                 if rms >= THRESHOLD: #(ii >= int(RATE / CHUNK * RECORD_SECONDS)):
                     silence_start = time.time()
                     if not recording_started:
-                        SILENCE_LIMIT = 1
+                        SILENCE_LIMIT = 0.50
                         print("recording...")
                         image_picture = pygi.screenshot("axiom_screenshot.png")
                         if not image_lock:
@@ -682,7 +689,7 @@ def record_audio_output(
             #print("FRAMES DIALOGUE OUTPUT:"+str(i)+"/"+str(int(RATE / CHUNK * RECORD_SECONDS)))
 
             if not can_speak_event.is_set():
-                time.sleep(1)
+                time.sleep(0.05)
                 break
                     
             data = stream.read(CHUNK, exception_on_overflow=True)

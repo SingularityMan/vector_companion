@@ -24,6 +24,7 @@ import simpleaudio as sa
 from transformers import AutoProcessor, AutoModelForCausalLM
 from TTS.api import TTS
 import torch
+from torch.quantization import quantize_dynamic
 from pydub import AudioSegment
 from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
 from comtypes import CLSCTX_ALL, CoInitialize, CoUninitialize
@@ -50,6 +51,9 @@ vision_model.to('cuda')
 model_name = "base" # Replace this with whichever whisper model you'd like.
 model = whisper.load_model(model_name)
 tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True).to('cuda')
+tts.synthesizer.use_cuda = True
+tts.synthesizer.fp16 = True
+tts.synthesizer.stream = True
 language_model = "gemma2:2b-instruct-q8_0"
 
 
@@ -91,9 +95,8 @@ async def queue_agent_responses(
         sentence_length = 2
         agent_prompt = (
             f"You're {agent.agent_name}. You have the following traits: {agent.trait_set}."
-            f"\n\nRespond in a maximum of {sentence_length} sentences with a focus on the context of the current situation and the previous agent's response."
-            "\nKeep your responses realistic and interesting, and directly related to the current situation while keeping your personality traits."
-            "\nFocus on the audio transcript output more than anything else."
+            f"\n\nRespond in a maximum of {sentence_length} sentences." #with a focus on the context of the current situation and the previous agent's response."
+            #"\nKeep your responses unique, realistic and interesting while keeping your personality traits."
             "\nDo not mention the user, nor the screenshots. Act like you're inside the situation as an observer, avoid breaking immersion or mentioning the user."
             "\nDo not include quotation marks nor emojis and do not repeat yourself."
             "\nDo not describe any gestures made."
@@ -107,8 +110,8 @@ async def queue_agent_responses(
         context_length = 4096
 
         messages, agent_messages, sentence_generator = await agent.generate_text_stream(
-            messages[-5:],
-            agent_messages[-5:],
+            messages[-3:],
+            agent_messages[-3:],
             agent.system_prompt1,
             f"\n\nHere is a transcript of the audio: \n\n'{audio_transcript_output}'\n\nAdditional contextual information: {additional_conversation_instructions}\n\n{agent_prompt}",
             context_length=context_length,
@@ -122,14 +125,14 @@ async def queue_agent_responses(
         context_length = 2048 #(len(user_voice_output.split())*100)
 
         messages, agent_messages, sentence_generator = await agent.generate_text_stream(
-            messages[-3:],
-            agent_messages[-3:],
+            messages[-2:],
+            agent_messages[-2:],
             agent.system_prompt2,
             f"Here is a description of the images/OCR you are viewing: \n\n{screenshot_description}\n\n"
             f"Here is a transcript of the audio output:\n\n{audio_transcript_output}\n\n"
             f"Here is the user's (Named: User, male) message: \n\n{user_voice_output}\n\n"
             f"You are {agent.agent_name}. You have the following traits: {agent.trait_set}."
-            f"\nRespond in {sentence_length} sentences helping the user in the style of your personality traits."
+            f"\nRespond in {sentence_length} sentences less than 15 words long per sentence, helping the user in the style of your personality traits."
             "\nPlace a special emphasis on the user's inquiry."
             "\nDo not include quotation marks nor emojis."
             "\nFollow these instructions without mentioning them.",
@@ -386,7 +389,7 @@ sentences = []
 can_speak = True
 can_speak_event.set()
 preload_tts_model(tts, agent_config[0]['speaker_wav'])
-preload_language_model(language_model)
+#preload_language_model(language_model)
     
 #---------------------MAIN LOOP----------------------#
 
@@ -446,9 +449,9 @@ async def main():
                 file_path = os.path.join(os.getcwd(), file)
                 if os.path.isfile(file_path):
                     audio_transcript_output = transcribe_audio(model, model_name, file_path)
+                    if len(audio_transcript_output.strip().split()) <= 6:
+                        audio_transcript_output = ""
                     audio_transcriptions += audio_transcript_output
-                    if len(audio_transcriptions.strip().split()) < 6:
-                        audio_transcriptions = ""
                 else:
                     print("No audio transcribed")
                     audio_transcriptions = ""
@@ -516,20 +519,3 @@ async def main():
 # Run the main loop
 if __name__ == "__main__":
     asyncio.run(main())
-    
-
-        
-
-    
-
-
-
-
-
-
-
-
-
-
-
-
