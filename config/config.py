@@ -567,10 +567,11 @@ def record_audio(
                     time.sleep(0.05)
                     if not can_speak_event.is_set():
                         print("Cancelling recording, agent is speaking.")
-                        stream.stop_stream()
-                        stream.close()
+                        break
+                        #stream.stop_stream()
+                        #stream.close()
                         
-                        return False
+                        #return False
 
                 try:
                     data = stream.read(CHUNK, exception_on_overflow=False)
@@ -592,7 +593,7 @@ def record_audio(
                 if rms >= THRESHOLD: #(ii >= int(RATE / CHUNK * RECORD_SECONDS)):
                     silence_start = time.time()
                     if not recording_started:
-                        SILENCE_LIMIT = 0.50
+                        SILENCE_LIMIT = 0.75
                         print("recording...")
                         image_picture = pygi.screenshot("axiom_screenshot.png")
                         if not image_lock:
