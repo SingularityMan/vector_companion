@@ -473,48 +473,45 @@ def view_image(vision_model: Any, processor: Any):
         image_lock = False
         print("Error:", e)
         pass"""
+    if not image_lock:
 
-    try:
-        image_lock = True
+        try:
+            image_lock = True
 
-        #client = ollama.Client()
-        #client.load_model("minicpm-v:8b-2.6-q4_0")
+            image_picture = pygi.screenshot("axiom_screenshot.png")
+            with open("axiom_screenshot.png", "rb") as image_file:
+                encoded_image = base64.b64encode(image_file.read()).decode("utf-8")
 
-        image_picture = pygi.screenshot("axiom_screenshot.png")
-        with open("axiom_screenshot.png", "rb") as image_file:
-            encoded_image = base64.b64encode(image_file.read()).decode("utf-8")
+            time.sleep(1)
 
-        time.sleep(1)
+            prompt = "Describe the contents of the image, placing a special emphasis on any text available." 
 
-        prompt = "Describe the contents of the image in as much detail as possible, placing a special emphasis on text." 
+            # Generate the response
+            result = ollama.generate(
+                model="minicpm-v:8b-2.6-q4_0",
+                prompt=prompt,
+                keep_alive=-1,
+                images=[encoded_image],
+                options={
+                    "repeat_penalty": 1.15,
+                    "temperature": 0.7,
+                    "top_p": 0.3,
+                    "num_ctx": 2048
+                    }
+                )
+            
+            current_time = datetime.now().time()
 
-        # Generate the response
-        result = ollama.generate(
-            model="minicpm-v:8b-2.6-q4_0",
-            prompt=prompt,
-            keep_alive=-1,
-            images=[encoded_image],
-            options={
-                "repeat_penalty": 1.15,
-                "temperature": 0.3,
-                "top_p": 0.3,
-                "top_k": 10000,
-                "num_ctx": 2048
-                }
-            )
-        
-        current_time = datetime.now().time()
+            text_response = result["response"]
+            with open("screenshot_description.txt", "a", encoding='utf-8') as f:
+                    f.write(f"\n\nScreenshot Contents at {current_time.strftime('%H:%M:%S')}: \n\n"+text_response)
 
-        text_response = result["response"]
-        with open("screenshot_description.txt", "a", encoding='utf-8') as f:
-                f.write(f"\n\nScreenshot Contents at {current_time.strftime('%H:%M:%S')}: \n\n"+text_response)
-
-        image_lock = False
-        
-    except Exception as e:
-        image_lock = False
-        print("Error:", e)
-        pass
+            image_lock = False
+            
+        except Exception as e:
+            image_lock = False
+            print("Error:", e)
+            pass
 
 def view_image_ocr(vision_model: Any, processor: Any):
 
@@ -628,7 +625,6 @@ def record_audio(
                     if ii % (int(RATE / CHUNK)/15) == 0:
                         if not image_lock:
                             print("[SCREENSHOT TAKEN]", ii)
-                            image_picture = pygi.screenshot("axiom_screenshot.png")
                             threading.Thread(target=view_image, args=(None, None)).start()
 
                 if rms >= THRESHOLD: #(ii >= int(RATE / CHUNK * RECORD_SECONDS)):
