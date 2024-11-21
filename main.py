@@ -44,17 +44,17 @@ audio_playback_lock = asyncio.Lock()
 recording_complete_event = threading.Event()
 
 # Vision, Audio, Speech and Text Generation Models
-vision_path = r"microsoft/Florence-2-large-ft"
-vision_model = AutoModelForCausalLM.from_pretrained(vision_path, trust_remote_code=True)
-processor = AutoProcessor.from_pretrained(vision_path, trust_remote_code=True)
-vision_model.to('cuda')
-model_name = "turbo" # Replace this with whichever whisper model you'd like.
+#vision_path = r"microsoft/Florence-2-large-ft"
+#vision_model = AutoModelForCausalLM.from_pretrained(vision_path, trust_remote_code=True)
+#processor = AutoProcessor.from_pretrained(vision_path, trust_remote_code=True)
+#vision_model.to('cuda')
+model_name = "base" # Replace this with whichever whisper model you'd like.
 model = whisper.load_model(model_name)
 tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True).to('cuda')
 tts.synthesizer.use_cuda = True
 tts.synthesizer.fp16 = True
 tts.synthesizer.stream = True
-language_model = "gemma2:27b-instruct-q4_0"
+language_model = "gemma2:2b-instruct-q8_0"
 
 
 async def queue_agent_responses(
@@ -304,12 +304,12 @@ agents_personality_traits = {
     "axiom": [
         ["cocky", ["cocky"]],
         ["witty", ["witty"]],
-        ["sassy", ["badass", "action-oriented", "rebellious", "over-the-top", "exciting", "confrontational"]],
+        ["sassy", ["badass", "action-oriented", "rebellious", "over-the-top", "exciting", "confrontational", "competitive"]],
         ["funny", ["satirical", "humorous", "playful", "blunt"]]
     ],
     "axis": [
         ["intuitive", ["intuitive", "cunning", "strategic", "observant"]],
-        ["satirical", ["sarcastic"]],
+        ["satirical", ["sarcastic", "sharp"]],
         ["witty", ["sassy", "snarky", "passive-aggressive"]],
         ["funny", ["edgy", "humorously dark", "controversial", "provocative"]]
     ],
@@ -435,8 +435,8 @@ async def main():
             random_record_seconds*file_index_count,
             THRESHOLD,
             SILENCE_LIMIT,
-            vision_model,
-            processor,
+            None,
+            None,
             can_speak_event
             )
         record_audio_dialogue.join()
