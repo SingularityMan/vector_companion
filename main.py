@@ -48,13 +48,13 @@ vision_path = r"microsoft/Florence-2-large-ft"
 vision_model = AutoModelForCausalLM.from_pretrained(vision_path, trust_remote_code=True)
 processor = AutoProcessor.from_pretrained(vision_path, trust_remote_code=True)
 vision_model.to('cuda')
-model_name = "base" # Replace this with whichever whisper model you'd like.
+model_name = "turbo" # Replace this with whichever whisper model you'd like.
 model = whisper.load_model(model_name)
 tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True).to('cuda')
 tts.synthesizer.use_cuda = True
 tts.synthesizer.fp16 = True
 tts.synthesizer.stream = True
-language_model = "gemma2:2b-instruct-q8_0"
+language_model = "gemma2:27b-instruct-q4_0"
 
 
 async def queue_agent_responses(
@@ -98,7 +98,7 @@ async def queue_agent_responses(
             f"\n\nRespond in a maximum of {sentence_length} sentences." #with a focus on the context of the current situation and the previous agent's response."
             #"\nKeep your responses unique, realistic and interesting while keeping your personality traits."
             "\nDo not mention the user, nor the screenshots. Act like you're inside the situation as an observer, avoid breaking immersion or mentioning the user."
-            "\nDo not include quotation marks nor emojis and do not repeat yourself."
+            "\nDo not include emojis and do not repeat yourself."
             "\nDo not describe any gestures made."
             "\nFollow these instructions without mentioning them."
         )
@@ -107,11 +107,11 @@ async def queue_agent_responses(
             len(additional_conversation_instructions.split()) * 2 +
             len(screenshot_description.split()) * 2
         )
-        context_length = 4096
+        context_length = 2048
 
         messages, agent_messages, sentence_generator = await agent.generate_text_stream(
-            messages[-3:],
-            agent_messages[-3:],
+            messages[-10:],
+            agent_messages[-10:],
             agent.system_prompt1,
             f"\n\nHere is a transcript of the audio: \n\n'{audio_transcript_output}'\n\nAdditional contextual information: {additional_conversation_instructions}\n\n{agent_prompt}",
             context_length=context_length,
@@ -125,16 +125,16 @@ async def queue_agent_responses(
         context_length = 2048 #(len(user_voice_output.split())*100)
 
         messages, agent_messages, sentence_generator = await agent.generate_text_stream(
-            messages[-2:],
-            agent_messages[-2:],
+            messages[-5:],
+            agent_messages[-5:],
             agent.system_prompt2,
             f"Here is a description of the images/OCR you are viewing: \n\n{screenshot_description}\n\n"
             f"Here is a transcript of the audio output:\n\n{audio_transcript_output}\n\n"
             f"Here is the user's (Named: User, male) message: \n\n{user_voice_output}\n\n"
             f"You are {agent.agent_name}. You have the following traits: {agent.trait_set}."
-            f"\nRespond in {sentence_length} sentences less than 15 words long per sentence, helping the user in the style of your personality traits."
-            "\nPlace a special emphasis on the user's inquiry."
-            "\nDo not include quotation marks nor emojis."
+            f"\nRespond in {sentence_length} sentences, with your first sentence being less than 5 words long but more than 1 word long, helping the user in the style of your personality traits."
+            "\nPlace a special emphasis on the user's inquiry without repeating the previous message."
+            "\nDo not include emojis."
             "\nFollow these instructions without mentioning them.",
             context_length=context_length,
             temperature=0.8,
@@ -303,12 +303,12 @@ You can add and remove as many categories and traits as you like.
 agents_personality_traits = {
     "axiom": [
         ["cocky", ["cocky"]],
-        ["sassy", ["witty"]],
-        ["witty", ["badass", "action-oriented"]],
+        ["witty", ["witty"]],
+        ["sassy", ["badass", "action-oriented", "rebellious", "over-the-top", "exciting", "confrontational"]],
         ["funny", ["satirical", "humorous", "playful", "blunt"]]
     ],
     "axis": [
-        ["intuitive", ["intuitive"]],
+        ["intuitive", ["intuitive", "cunning", "strategic", "observant"]],
         ["satirical", ["sarcastic"]],
         ["witty", ["sassy", "snarky", "passive-aggressive"]],
         ["funny", ["edgy", "humorously dark", "controversial", "provocative"]]
@@ -457,6 +457,22 @@ async def main():
                     audio_transcriptions = ""
 
         audio_transcript_output = audio_transcriptions
+        
+        erroneous_transcriptions = [
+            "I can t even know what the car is",
+            "I can t even know what the I m saying",
+            "I can t even know what the",
+            "I can t even if I can",
+            "I I I I"
+        ]
+        
+        if len(audio_transcript_output.strip().split()) <= 6:
+            audio_transcript_output = ""
+
+        for transcription in erroneous_transcriptions:
+            if transcription in audio_transcript_output.strip():
+                audio_transcript_output = ""
+                break
 
         if os.path.exists(WAVE_OUTPUT_FILENAME):
             user_voice_output = transcribe_audio(model, model_name, WAVE_OUTPUT_FILENAME)

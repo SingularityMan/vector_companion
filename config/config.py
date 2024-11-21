@@ -33,8 +33,6 @@ config_dir = os.path.dirname(os.path.realpath(__file__))
 
 #------------------------------------------TEXT PROCESSING-----------------------------------------------------------#
 
-
-
 class Agent():
 
     """
@@ -91,13 +89,13 @@ class Agent():
                     model=self.language_model,
                     messages=messages,
                     stream=True,
+                    keep_alive=-1,
                     options={
                         "repeat_penalty": 1.15,
                         "temperature": temperature,
                         "top_p": top_p,
                         "top_k": top_k,
-                        "num_ctx": context_length,
-                        "seed": random.randint(0, 2147483647)
+                        "num_ctx": context_length
                     }
                 )
 
@@ -542,7 +540,7 @@ def record_audio(
 
             # Cancel recording if Agent speaking
             if not can_speak_event.is_set():
-                time.sleep(1)
+                time.sleep(0.05)
                 print("[record_user_mic] Waiting for response to complete...")
                 continue
             
@@ -593,7 +591,7 @@ def record_audio(
                 if rms >= THRESHOLD: #(ii >= int(RATE / CHUNK * RECORD_SECONDS)):
                     silence_start = time.time()
                     if not recording_started:
-                        SILENCE_LIMIT = 0.75
+                        SILENCE_LIMIT = 0.85
                         print("recording...")
                         image_picture = pygi.screenshot("axiom_screenshot.png")
                         if not image_lock:
