@@ -486,7 +486,7 @@ def view_image(vision_model: Any, processor: Any):
 
         time.sleep(1)
 
-        prompt = "Describe the contents of the image in as much detail as possible." 
+        prompt = "Describe the contents of the image in as much detail as possible, placing a special emphasis on text." 
 
         # Generate the response
         result = ollama.generate(
@@ -499,16 +499,17 @@ def view_image(vision_model: Any, processor: Any):
                 "temperature": 0.7,
                 "top_p": 0.3,
                 "top_k": 10000,
-                "num_ctx": 500
+                "num_ctx": 2048
                 }
             )
-
-        image_lock = False
+        
         current_time = datetime.now().time()
 
         text_response = result["response"]
         with open("screenshot_description.txt", "a", encoding='utf-8') as f:
                 f.write(f"\n\nScreenshot Contents at {current_time.strftime('%H:%M:%S')}: \n\n"+text_response)
+
+        image_lock = False
         
     except Exception as e:
         image_lock = False
