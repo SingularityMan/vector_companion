@@ -38,7 +38,7 @@ They transcribe audio output and user microphone input simultaneously while peri
 
 - Minimum 20GB VRAM required to run the entire framework on `gemma2:2b-instruct-q8_0`. You may swap out the model in the `language_model` variable in `main.py` if you would like to lower the VRAM usage or replace the model with a larger one.
 - You will need a `torch` version compatible with your CUDA version installed.
-- You need to install Ollama if you haven't already and download `gemma2:2b-instruct-q8_0` or whichever model you'd like to use in Ollama. You must also install `minicpm-v:8b-2.6-q4_0` (or greater size) in order to use updated component.
+- You need to install Ollama if you haven't already and download `gemma2:2b-instruct-q8_0` or whichever model you'd like to use in Ollama. You must also install `minicpm-v:8b-2.6-q4_0` (or greater size) in order to use updated vision component.
 - You need VB Cable installed on your PC in order for Python to listen to your own PC.
 
 ### Cloning
