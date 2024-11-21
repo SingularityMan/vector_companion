@@ -496,7 +496,7 @@ def view_image(vision_model: Any, processor: Any):
             images=[encoded_image],
             options={
                 "repeat_penalty": 1.15,
-                "temperature": 0.7,
+                "temperature": 0.3,
                 "top_p": 0.3,
                 "top_k": 10000,
                 "num_ctx": 2048
@@ -655,6 +655,8 @@ def record_audio(
                 frames.append(data)
 
             if not can_speak_event.is_set():
+
+                image_lock = False
 
                 # Stop Recording
                 stream.stop_stream()
