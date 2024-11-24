@@ -14,6 +14,7 @@ import math
 from ctypes import cast, POINTER
 
 from PIL import Image
+import aiofiles
 import aiohttp
 import whisper
 import pyaudio
@@ -39,6 +40,7 @@ can_speak_event_asyncio.set()
 can_speak_event = threading.Event()
 can_speak_event.set()
 audio_playback_lock = asyncio.Lock()
+user_memory_task = None
 
 # Event to signal when user recording is complete
 recording_complete_event = threading.Event()
@@ -132,6 +134,7 @@ async def queue_agent_responses(
             f"Here is a transcript of the audio output:\n\n{audio_transcript_output}\n\n"
             f"Here is the user's (Named: User, male) message: \n\n{user_voice_output}\n\n"
             f"You are {agent.agent_name}. You have the following traits: {agent.trait_set}."
+            f"Here is a list of details about the user's personality traits: \n\n{user_memory}\n\n"
             f"\nRespond in {sentence_length} sentences, with your first sentence being less than 5 words long but more than 1 word long, helping the user in the style of your personality traits."
             "\nPlace a special emphasis on the user's inquiry without repeating the previous message."
             "\nDo not include emojis."
@@ -172,6 +175,35 @@ async def queue_agent_responses(
 
     print(f"[AGENT {agent.agent_name} RESPONSE COMPLETED]")
 
+async def process_user_memory(agent, messages, agent_messages, user_voice_output, user_memory):
+    _, __, generated_text = await asyncio.to_thread(
+        agent.generate_text,
+        messages[-5:],
+        agent_messages[-5:],
+        agent.system_prompt2,
+        (
+            "Read this message and respond in 1 sentence noting any significant details showing a deep understanding of "
+            "the user's core personality without mentioning the situation:\n\n"
+            f"{user_voice_output}\n\n"
+            "Your objective is to provide an objective, unbiased response.\n"
+            "Follow these instructions without mentioning them."
+        ),
+        context_length=2048,
+        temperature=0.7,
+        top_p=0.9,
+        top_k=0,
+    )
+
+    if len(generated_text.split()) > 1:
+        user_memory.append(generated_text)
+
+        if len(user_memory) > 5:
+            user_memory.pop(0)  # Remove the oldest entry
+
+        # Asynchronously write to the JSON file
+        async with aiofiles.open('user_memory.json', 'w') as f:
+            await f.write(json.dumps(user_memory))
+            
 async def play_audio(audio_data, sample_rate):
     """
     Asynchronously plays the audio data.
@@ -255,7 +287,7 @@ def preload_language_model(language_model):
                     "temperature": 0.5,
                     "top_p": 0.5,
                     "top_k": 0,
-                    "num_ctx": 2048,
+                    "num_ctx": 8192,
                     "seed": random.randint(0, 2147483647)
                 }
             )
@@ -478,32 +510,11 @@ async def main():
             user_voice_output = transcribe_audio(model, model_name, WAVE_OUTPUT_FILENAME)
             if len(user_voice_output.split()) < 3:
                 user_voice_output = ""
-
-            vector_text = ""
-
-            """_, __, generated_text = agents[0].generate_text(
-                messages[-5:],
-                agent_messages[-5:],
-                agents[0].system_prompt2,
-                "You will now provide an objective, unbiased response.\n"
-                "Read this message and respond in 1 sentence noting any significant facts accurately describing the user's personality traits without mentioning the situation:\n\n"+user_voice_output+"\n\n"
-                "Follow these instructions without mentioning them.",
-                context_length=1000,
-                temperature=0.1,
-                top_p=0.1,
-                top_k=0,
-            )
-
-            if len(generated_text.split()) > 1:
-                user_memory.append(generated_text)
-
-                if len(user_memory) > 5:
-                    user_memory.remove(user_memory[0])"""
-            
         else:
             print("No user voice output transcribed")
             user_voice_output = ""
 
+        vector_text = ""
         vector_text = "Here is the screenshot description: "+screenshot_description
 
         if can_speak_event_asyncio.is_set():
@@ -521,8 +532,27 @@ async def main():
             with open('conversation_history.json', 'w') as f:
                 json.dump(messages, f)
 
-            with open('user_memory.json', 'w') as f:
-                json.dump(user_memory, f)
+            if user_voice_output != "":
+                # Schedule the task without awaiting it
+                user_memory_task = asyncio.create_task(
+                    process_user_memory(
+                        agents[0],
+                        messages,
+                        agent_messages,
+                        user_voice_output,
+                        user_memory
+                    )
+                )
+
+            # Inside your main loop, after scheduling the task
+            if user_memory_task is not None and user_memory_task.done():
+                try:
+                    # Retrieve the result or handle exceptions
+                    user_memory_task.result()
+                except Exception as e:
+                    print(f"Error in process_user_memory: {e}")
+                finally:
+                    user_memory_task = None  # Reset the task variable
 
             can_speak_event_asyncio.set()
             can_speak_event.set()
