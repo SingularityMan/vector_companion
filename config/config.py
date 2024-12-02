@@ -31,6 +31,7 @@ import soundfile as sf
 import torch
 
 config_dir = os.path.dirname(os.path.realpath(__file__))
+audio_transcriptions = ""
 
 #------------------------------------------TEXT PROCESSING-----------------------------------------------------------#
 
@@ -43,7 +44,7 @@ class Agent():
     The class is responsible for generating a text response and summarizing the chat history when appropriate.
     """
 
-    def __init__(self, agent_name, agent_gender, personality_traits, system_prompt1, system_prompt2, dialogue_list, language_model, speaker_wav):
+    def __init__(self, agent_name, agent_gender, personality_traits, system_prompt1, system_prompt2, dialogue_list, language_model, speaker_wav, extraversion):
         self.agent_name = agent_name
         self.agent_gender = agent_gender
         self.system_prompt1 = system_prompt1
@@ -54,6 +55,7 @@ class Agent():
         self.dialogue_list = dialogue_list
         self.language_model = language_model
         self.speaker_wav = speaker_wav
+        self.extraversion = extraversion
 
     async def generate_text_stream(
     self,
@@ -484,7 +486,7 @@ def view_image(vision_model: Any, processor: Any):
 
             time.sleep(1)
 
-            prompt = "Describe the contents of the image, placing a special emphasis on any text available." 
+            prompt = "Write down all the visual elements sent to you verbatim." 
 
             # Generate the response
             result = ollama.generate(
@@ -495,7 +497,7 @@ def view_image(vision_model: Any, processor: Any):
                 options={
                     "repeat_penalty": 1.15,
                     "temperature": 0.7,
-                    "top_p": 0.3,
+                    "top_p": 0.9,
                     "num_ctx": 2048
                     }
                 )
@@ -598,6 +600,9 @@ def record_audio(
             # Record for RECORD_SECONDS
             silence_start = None
             recording_started = False
+            if not image_lock:
+                print("[SCREENSHOT TAKEN]", ii)
+                threading.Thread(target=view_image, args=(vision_model, processor)).start()
 
             while True:
                 
@@ -636,7 +641,7 @@ def record_audio(
                         if not image_lock:
                             print("[SCREENSHOT TAKEN]", ii)
                             threading.Thread(target=view_image, args=(vision_model, processor)).start()
-                        THRESHOLD = 150
+                        THRESHOLD = 120
                         recording_started = True
                     elif rms >= THRESHOLD and recording_started:
                         #print(f"[CONTINUING TO SPEAK]:", rms)
@@ -681,9 +686,13 @@ def record_audio_output(
                         RECORD_SECONDS: int,
                         file_index_count: int,
                         can_speak_event: bool,
+                        model: Any,
+                        model_name: str
                         ):
 
     file_index = 0
+    global audio_transcriptions
+    audio_transcriptions = ""
 
     while True:
 
@@ -750,6 +759,18 @@ def record_audio_output(
         wf.setframerate(RATE)
         wf.writeframes(b''.join(frames))
         wf.close()
+
+        for file in os.listdir(os.getcwd()):
+            if "audio_transcript_output" in file:
+                file_path = os.path.join(os.getcwd(), file)
+                if os.path.isfile(file_path):
+                    audio_transcript_output = transcribe_audio(model, model_name, file_path)
+                    if len(audio_transcript_output.strip().split()) <= 6:
+                        audio_transcript_output = ""
+                    audio_transcriptions += " "+audio_transcript_output
+                else:
+                    print("No audio transcribed")
+                    #audio_transcriptions = ""
 
         if file_index >= file_index_count:
             can_speak_event.clear()
