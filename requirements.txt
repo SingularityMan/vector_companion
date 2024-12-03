@@ -1,7 +1,7 @@
 aiohttp==3.8.3
 apex==0.9.10dev
 beautifulsoup4==4.11.1
-bfloat16==1.2.0
+bfloat16
 comtypes==1.1.14
 coqui_tts==0.24.1
 cupy==13.3.0
