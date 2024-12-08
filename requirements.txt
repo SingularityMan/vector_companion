@@ -5,7 +5,6 @@ bfloat16
 comtypes==1.1.14
 coqui_tts==0.24.1
 cupy==13.3.0
-deepspeed==0.15.4
 einops==0.8.0
 flash_attn==2.3.2
 fvcore==0.1.5.post20221221
