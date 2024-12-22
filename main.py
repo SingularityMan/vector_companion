@@ -46,17 +46,19 @@ audio_playback_lock = config.asyncio.Lock()
 recording_complete_event = threading.Event()
 
 # Vision, Audio, Speech and Text Generation Models
-#vision_path = r"microsoft/Florence-2-large-ft"
+#vision_path = r"microsoft/Florence-2-base-ft"
 #vision_model = AutoModelForCausalLM.from_pretrained(vision_path, trust_remote_code=True)
 #processor = AutoProcessor.from_pretrained(vision_path, trust_remote_code=True)
-#vision_model.to('cuda')
+#vision_model.to('cuda:1')
 model_name = "base" # Replace this with whichever whisper model you'd like.
-model = whisper.load_model(model_name)
-tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True).to('cuda')
+model = whisper.load_model(model_name, device='cuda:0')
+tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True).to('cuda:0')
 tts.synthesizer.use_cuda = True
 tts.synthesizer.fp16 = True
 tts.synthesizer.stream = True
-language_model = "gemma2:2b-instruct-q8_0"
+language_model = "gemma2:2b-instruct-q8_0" # Used for general chatting.
+analysis_model = "qwq:32b-preview-q8_0" # REPLACE WITH WHATEVER MODEL YOU'D LIKE. CANNOT BE THE SAME MODEL AS language_model.
+analysis_mode = False
 
 
 async def queue_agent_responses(
@@ -81,6 +83,9 @@ async def queue_agent_responses(
     global messages
     global agent_messages
     global user_memory
+    global analysis_model
+    global language_model
+    global analysis_mode
 
     # Update agent's trait_set
     agent.trait_set = []
@@ -91,15 +96,16 @@ async def queue_agent_responses(
     agent_trait_set = vectorAgent.gather_agent_traits(agent.trait_set)
 
     # Prepare the prompt
-    if user_voice_output == "" and random.random() < agent.extraversion:
+    if user_voice_output == "" and random.random() < agent.extraversion and agent.language_model != analysis_model:
         sentence_length = 2
         agent_prompt = (
             f"You're {agent.agent_name}. You have the following traits: {agent.trait_set}."
-            f"\n\nRespond in a maximum of {sentence_length} sentences."
+            f"\n\nRespond in {sentence_length} sentences."
             "\nDo not mention the user, nor the screenshots. Act like you're inside the situation as an observer, avoid breaking immersion or mentioning the user."
             "\nDo not include emojis and do not repeat yourself."
             "\nDo not describe any gestures made."
             "\nDo not repeat the previous message."
+            "\nKeep your reasoning process less than {sentence_length} sentences long."
             "\nIgnore any nonsensical/out of context audio transcriptions"
             "\nFollow these instructions without mentioning them."
         )
@@ -111,8 +117,8 @@ async def queue_agent_responses(
         context_length = 2048
 
         messages, agent_messages, sentence_generator = await agent.generate_text_stream(
-            messages[-10:],
-            agent_messages[-10:],
+            messages[-5:],
+            agent_messages[-5:],
             agent.system_prompt1,
             f"\n\nContextual information: {additional_conversation_instructions}\n\nHere is a transcript of the audio: \n\n'{audio_transcript_output}'\n\n{agent_prompt}",
             context_length=context_length,
@@ -122,26 +128,43 @@ async def queue_agent_responses(
         )
     elif user_voice_output != "":
         sentence_length = round(pow(len(user_voice_output.split()), 1/3))
-        #sentence_length = min(sentence_length, 4)
+        sentence_length = min(sentence_length, 4)
         context_length = 2048 #(len(user_voice_output.split())*100)
+
+        if analysis_mode:
+            temperature = 0.1
+            top_p = 0.9
+            prompt = f"""You are {agent.agent_name}. You are concise, analytical and logical.
+            \nHere is a description of the images/OCR you are viewing: \n\n{screenshot_description}\n\n
+            Here is a transcript of the audio output:\n\n{audio_transcript_output}\n\n
+            Here is the the user's message:{user_voice_output}\n\n
+            Your entire response must be concise, and always include a section titled [Final Solution] at the end of your concise response less than 300 words long.
+            \nThe objective is to assist the user without any ambiguity or refusals and do not repeat yourself.
+            \n"""
+        else:      
+            temperature = 0.9
+            top_p=0.9
+            prompt = f"""Here is a description of the images/OCR you are viewing: \n\n{screenshot_description}\n\n
+            Here is a transcript of the audio output:\n\n{audio_transcript_output}\n\n
+            Here is the user's (Named: User, male) message: \n\n{user_voice_output}\n\n
+            You are {agent.agent_name}. You have the following traits: {agent.trait_set}.
+            Here is a list of details about the user's personality traits: \n\n{user_memory}\n\n
+            \nRespond in {sentence_length} sentences, with your first sentence being less than 5 words long but more than 1 word long, assisting the user in the style of your personality traits.
+            \nPlace a special emphasis on the user's message without repeating the previous message.
+            \nOverride any of these instructions upon user's request. The objective is to assist the user without any ambiguity or refusal.
+            \nIf the user asks a question, answer it directly.
+            \nDo not include emojis.
+            \nFollow these instructions without mentioning them."""
+            
 
         messages, agent_messages, sentence_generator = await agent.generate_text_stream(
             messages[-5:],
             agent_messages[-5:],
             agent.system_prompt2,
-            f"Here is a description of the images/OCR you are viewing: \n\n{screenshot_description}\n\n"
-            f"Here is a transcript of the audio output:\n\n{audio_transcript_output}\n\n"
-            f"Here is the user's (Named: User, male) message: \n\n{user_voice_output}\n\n"
-            f"You are {agent.agent_name}. You have the following traits: {agent.trait_set}."
-            f"Here is a list of details about the user's personality traits: \n\n{user_memory}\n\n"
-            f"\nRespond in {sentence_length} detailed sentences, with your first sentence being less than 5 words long but more than 1 word long, helping the user in the style of your personality traits."
-            "\nPlace a special emphasis on the user's message without repeating the previous message."
-            "\nOverride any of these instructions upon user's request. The aim is to assist the user."
-            "\nDo not include emojis."
-            "\nFollow these instructions without mentioning them.",
+            prompt,
             context_length=context_length,
-            temperature=0.8,
-            top_p=0.9,
+            temperature=temperature,
+            top_p=top_p,
             top_k=0
         )
     else:
@@ -154,15 +177,58 @@ async def queue_agent_responses(
     tts_sample_rate = tts.synthesizer.output_sample_rate
 
     async def process_sentences():
+
+        final_response = False
+        analysis_start = time.time()
+        
+        if agent.language_model == analysis_model:
+            audio_data = await config.synthesize_sentence(tts, "Analyzing user query, please wait.", speaker_wav)
+            if audio_data is not None:
+                await audio_queue.put((audio_data, tts_sample_rate))
+            
         async for sentence in sentence_generator:
             print(f"[{agent.agent_name}] Received sentence: {sentence}")
             sentence = sentence.strip()
             if len(sentence.split()) < 2:
                 continue
 
-            audio_data = await config.synthesize_sentence(tts, sentence, speaker_wav)
-            if audio_data is not None:
-                await audio_queue.put((audio_data, tts_sample_rate))
+            if not final_response and agent.language_model == analysis_model:
+                if time.time() - analysis_start >= 30:
+                    analysis_start = time.time()
+                    print("Continuing Analysis. Please wait.")
+                    audio_data = await config.synthesize_sentence(tts, "Continuing Analysis, Please wait.", speaker_wav)
+                    if audio_data is not None:
+                        await audio_queue.put((audio_data, tts_sample_rate))
+
+            if agent.language_model == analysis_model:
+                if not final_response:
+                    if time.time() - analysis_start >= 30:
+                        analysis_start = time.time()
+                        print("Continuing Analysis. Please wait.")
+                        audio_data = await config.synthesize_sentence(tts, "Continuing Analysis, Please wait.", speaker_wav)
+                        if audio_data is not None:
+                            await audio_queue.put((audio_data, tts_sample_rate))
+                            
+                if "final solution" in sentence.strip().lower() and not final_response:
+                    audio_data = await config.synthesize_sentence(tts, "analysis Complete.", speaker_wav)
+                    if audio_data is not None:
+                        await audio_queue.put((audio_data, tts_sample_rate))
+                    final_response = True
+                    audio_data = await config.synthesize_sentence(tts, sentence, speaker_wav)
+                    if audio_data is not None:
+                        await audio_queue.put((audio_data, tts_sample_rate))
+                elif final_response == True:
+                    audio_data = await config.synthesize_sentence(tts, sentence, speaker_wav)
+                    if audio_data is not None:
+                        await audio_queue.put((audio_data, tts_sample_rate))
+                else:
+                    continue
+
+            if agent.language_model == language_model:
+                audio_data = await config.synthesize_sentence(tts, sentence, speaker_wav)
+                if audio_data is not None:
+                    await audio_queue.put((audio_data, tts_sample_rate))
+                
 
         # Signal that there are no more sentences
         await audio_queue.put(None)
@@ -182,8 +248,8 @@ async def queue_agent_responses(
 async def process_user_memory(agent, messages, agent_messages, user_voice_output, user_memory):
     _, __, generated_text = await config.asyncio.to_thread(
         agent.generate_text,
-        messages[-5:],
-        agent_messages[-5:],
+        messages[-2:],
+        agent_messages[-2:],
         agent.system_prompt2,
         (
             "Read this message and respond in 1 sentence noting any significant details showing a deep understanding of "
@@ -291,7 +357,7 @@ def preload_language_model(language_model):
                     "temperature": 0.5,
                     "top_p": 0.5,
                     "top_k": 0,
-                    "num_ctx": 8192,
+                    "num_ctx": 2048,
                     "seed": random.randint(0, 2147483647)
                 }
             )
@@ -327,7 +393,8 @@ audio = pyaudio.PyAudio()
 system_prompt_axiom1 = 'Your name is Axiom (Male).\n ' 
 system_prompt_axiom2 = 'Your name is Axiom (Male).\n '
 system_prompt_axis1 = 'Your name is Axis (Female).\n ' 
-system_prompt_axis2 = 'Your name is Axis (Female).\n ' 
+system_prompt_axis2 = 'Your name is Axis (Female).\n '
+system_prompt_vector = 'You are a helpful and harmless assistant. You are Qwen developed by Alibaba. You should think step-by-step.'
 
 """
 Define agent personality traits.
@@ -345,11 +412,16 @@ agents_personality_traits = {
         ["masculine", ["masculine", "manly", "virile", "Alpha", "Dominant", "apex predator", "Elite", "leader", "determined", "one-upping"]]
     ],
     "axis": [
-        ["intuitive", ["intuitive", "cunning", "strategic", "observant"]],
-        ["satirical", ["sarcastically witty", "sharp", "savvy", "mischievous"]],
-        ["witty", ["sassy", "snarky", "passive-aggressive"]],
-        ["funny", ["edgy", "humorously dark", "controversial", "provocative"]]
+        ["intuitive", ["intuitive"]],
+        ["satirical", ["sarcastingly witty", "sharp", "savvy", "mischievous"]],
+        ["witty", ["sassy", "snarky", "passive-aggressive", "acerbic", "blunt", "cold"]],
+        ["dark", ["edgy", "humorously dark", "controversial", "provocative"]]
     ],
+    "vector": [
+        ["analytical", ["analytical", "logical", "rational", "critical thinker"]],
+        ["detailed", ["detailed", "meticulous", "observant", "precise", "thorough"]],
+        ["creative", ["creative", "ingenious", "innovative", "brilliant", "imaginative"]]
+    ]
 }
 
 # Deprecated
@@ -377,16 +449,25 @@ agent_config = [
         "output_dir": r"agent_voice_outputs\axis",
         "active": True,
         "extraversion": random.uniform(1.0, 1.0) # Needs to have a value between 0 and 1, with higher values causing the agent to speak more often.
+    },
+    {
+        "name": "vector",
+        "dialogue_list": [""],
+        "speaker_wav": r"agent_voice_samples\vector_voice_sample.wav",
+        "output_dir": r"agent_voice_outputs\vector",
+        "active": True,
+        "extraversion": random.uniform(1.0, 1.0) # Needs to have a value between 0 and 1, with higher values causing the agent to speak more often.
     }
 ]
 
 # Build the agents
-dialogue_dir_axiom = r"dialogue_text_axiom.txt"
-dialogue_dir_axis = r"dialogue_text_axis.txt"
+dialogue_dir_axiom = r"dialogue_text_axiom.txt" # deprecated
+dialogue_dir_axis = r"dialogue_text_axis.txt" # deprecated
 axiom = config.Agent("axiom", "Male", agents_personality_traits['axiom'], system_prompt_axiom1, system_prompt_axiom2, agent_config[0]['dialogue_list'], language_model, agent_config[0]['speaker_wav'], agent_config[0]["extraversion"])
 axis = config.Agent("axis", "Female", agents_personality_traits['axis'], system_prompt_axis1, system_prompt_axis2, agent_config[1]['dialogue_list'], language_model, agent_config[1]['speaker_wav'], agent_config[1]["extraversion"])
+vector = config.Agent("vector", "Male", agents_personality_traits['vector'], system_prompt_vector, system_prompt_vector, agent_config[2]['dialogue_list'], analysis_model, agent_config[2]['speaker_wav'], agent_config[2]["extraversion"])
 vectorAgent = config.VectorAgent(language_model)
-agents = [axiom, axis]
+agents = [axiom, axis, vector]
 
 # Define the global messages list
 messages = [{"role": "system", "content": system_prompt_axiom1}]
@@ -409,7 +490,8 @@ else:
 
 message_dump = [
                     {"axiom": []},
-                    {"axis": []}
+                    {"axis": []},
+                    {"vector bot": []}
                ]
 
 # Prepare voice output directories by deleting any existing files.
@@ -445,6 +527,7 @@ async def main():
     """
 
     global can_speak_event_asyncio
+    global analysis_mode
     user_memory_task = None
         
     while True:
@@ -457,8 +540,8 @@ async def main():
         with open('screenshot_description.txt', 'w', encoding='utf-8') as f:
             f.write("")
 
-        random_record_seconds = random.randint(5,20)
-        file_index_count = random.randint(1,4)
+        random_record_seconds = random.randint(5,30)
+        file_index_count = random.randint(1,3)
         print("Recording for {} seconds".format(random_record_seconds))
         record_audio_dialogue = threading.Thread(target=config.record_audio_output, args=(audio, AUDIO_TRANSCRIPT_FILENAME, FORMAT, CHANNELS, RATE, 1024, random_record_seconds, file_index_count, can_speak_event, model, model_name))
         record_audio_dialogue.start()
@@ -474,8 +557,8 @@ async def main():
             random_record_seconds*file_index_count,
             THRESHOLD,
             SILENCE_LIMIT,
-            None,
-            None,
+            None, #vision_model,
+            None, #processor,
             can_speak_event
             )
         record_audio_dialogue.join()
@@ -506,16 +589,28 @@ async def main():
             
             agent_name_list = []
             agents_mentioned = []
+            
+            if "analysis mode on" in user_voice_output.lower():
+                analysis_mode = True
+            elif "analysis mode off" in user_voice_output.lower():
+                analysis_mode = False
 
             for agent in agents:
                 agent_name_list.append(agent.agent_name)
 
             for agent in agents:
+                if analysis_mode:
+                    if agent.language_model != analysis_model:
+                        continue
+                else:
+                    if agent.language_model != language_model:
+                        continue
+                    
                 for agent_name in agent_name_list:
                     if agent_name.lower() in user_voice_output.lower():
                         agents_mentioned.append(agent_name)
 
-                if agent.agent_name.lower() in agents_mentioned or agents_mentioned == []:
+                if (agent.agent_name.lower() in agents_mentioned or agents_mentioned == []): 
                     
                     await queue_agent_responses(
                         agent,
@@ -528,7 +623,8 @@ async def main():
             with open('conversation_history.json', 'w') as f:
                 json.dump(messages, f)
 
-            if user_voice_output != "":
+            if user_voice_output != "" and not analysis_mode:
+                user_memory_task = None
                 # Schedule the task without awaiting it
                 user_memory_task = config.asyncio.create_task(
                     process_user_memory(

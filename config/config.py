@@ -98,7 +98,8 @@ class Agent():
                         "temperature": temperature,
                         "top_p": top_p,
                         "top_k": top_k,
-                        "num_ctx": context_length
+                        "num_ctx": context_length,
+                        "num_batch": 512
                     }
                 )
 
@@ -157,7 +158,8 @@ class Agent():
             "stream": False,
             "options": {
                 "repeat_penalty": 1.15,
-                "num_ctx": context_length
+                "num_ctx": context_length,
+                "num_batch": 512
             }
         }
 
@@ -240,7 +242,8 @@ class Agent():
                 "top_p": top_p,
                 "top_k": top_k,
                 "num_ctx": context_length,
-                "seed": random.randint(0, 2147483647)
+                "seed": random.randint(0, 2147483647),
+                "num_batch": 512
                 }
         }
 
@@ -329,7 +332,8 @@ class VectorAgent():
             "stream": False,
             "options":{
                 "temperature": 0.3,
-                "num_ctx": context_length
+                "num_ctx": context_length,
+                "num_batch": 512
                 }
         }
 
@@ -432,13 +436,15 @@ def view_image(vision_model: Any, processor: Any):
     Views a screenshot and captions it to provide a description.
     """
 
-    global image_lock
+    """global image_lock
 
-    """try:
+    try:
 
         image_lock = True
 
-        time.sleep(3)
+        image_picture = pygi.screenshot("axiom_screenshot.png")
+
+        time.sleep(5)
 
         prompt = "<MORE_DETAILED_CAPTION>"
 
@@ -447,12 +453,14 @@ def view_image(vision_model: Any, processor: Any):
         image_file = "axiom_screenshot.png"
         image = Image.open(image_file)
 
+        device = "cuda:1"
         inputs = processor(text=prompt, images=image, return_tensors="pt")
+        #inputs = {k: v.to(device) for k, v in inputs.items()}
 
         generated_ids = vision_model.generate(
-            input_ids=inputs["input_ids"].cuda(),
-            pixel_values=inputs["pixel_values"].cuda(),
-            max_new_tokens=500,
+            input_ids=inputs["input_ids"].to(device),
+            pixel_values=inputs["pixel_values"].to(device),
+            max_new_tokens=1000,
             do_sample=True,
             num_beams=10
         )
@@ -475,6 +483,9 @@ def view_image(vision_model: Any, processor: Any):
         image_lock = False
         print("Error:", e)
         pass"""
+
+    global image_lock
+        
     if not image_lock:
 
         try:
@@ -484,9 +495,9 @@ def view_image(vision_model: Any, processor: Any):
             with open("axiom_screenshot.png", "rb") as image_file:
                 encoded_image = base64.b64encode(image_file.read()).decode("utf-8")
 
-            time.sleep(1)
+            time.sleep(5)
 
-            prompt = "Write down all the visual elements sent to you verbatim." 
+            prompt = "Describe the image you see in detail." 
 
             # Generate the response
             result = ollama.generate(
@@ -498,7 +509,8 @@ def view_image(vision_model: Any, processor: Any):
                     "repeat_penalty": 1.15,
                     "temperature": 0.7,
                     "top_p": 0.9,
-                    "num_ctx": 2048
+                    "num_ctx": 2048,
+                    "batch_size": 512
                     }
                 )
             
@@ -526,15 +538,16 @@ def view_image_ocr(vision_model: Any, processor: Any):
         prompt = "<OCR_WITH_REGION>"
 
         image_file = "axiom_screenshot.png"
+        device = "cuda:1"
         image = Image.open(image_file)
 
         inputs = processor(text=prompt, images=image, return_tensors="pt")
 
         generated_ids = vision_model.generate(
-            input_ids=inputs["input_ids"].cuda(),
-            pixel_values=inputs["pixel_values"].cuda(),
-            max_new_tokens=500,
-            do_sample=False,
+            input_ids=inputs["input_ids"].cuda(device),
+            pixel_values=inputs["pixel_values"].cuda(device),
+            max_new_tokens=200,
+            do_sample=True,
             temperature=1,
             num_beams=5
         )
@@ -630,18 +643,17 @@ def record_audio(
                     if ii % (int(RATE / CHUNK)/15) == 0:
                         if not image_lock:
                             print("[SCREENSHOT TAKEN]", ii)
-                            threading.Thread(target=view_image, args=(None, None)).start()
+                            threading.Thread(target=view_image, args=(vision_model, processor)).start()
 
                 if rms >= THRESHOLD: #(ii >= int(RATE / CHUNK * RECORD_SECONDS)):
                     silence_start = time.time()
                     if not recording_started:
-                        SILENCE_LIMIT = 0.85
+                        SILENCE_LIMIT = 0.75
                         print("recording...")
-                        image_picture = pygi.screenshot("axiom_screenshot.png")
                         if not image_lock:
                             print("[SCREENSHOT TAKEN]", ii)
                             threading.Thread(target=view_image, args=(vision_model, processor)).start()
-                        THRESHOLD = 120
+                        THRESHOLD = 60
                         recording_started = True
                     elif rms >= THRESHOLD and recording_started:
                         #print(f"[CONTINUING TO SPEAK]:", rms)
@@ -709,6 +721,7 @@ def record_audio_output(
         device_index = None
         for i in range(p.get_device_count()):
             device_info = p.get_device_info_by_index(i)
+            #print(device_info)
             if 'VB-Audio' in device_info['name']:  # Look for 'VB-Audio' instead of 'VB-Cable'
                 device_index = i
                 break
@@ -723,7 +736,7 @@ def record_audio_output(
                         rate=RATE,
                         input=True,
                         frames_per_buffer=CHUNK,
-                        input_device_index=3)
+                        input_device_index=2)
 
         print("* recording Audio Transcript")
 
