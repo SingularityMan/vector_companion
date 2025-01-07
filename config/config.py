@@ -495,8 +495,6 @@ def view_image(vision_model: Any, processor: Any):
             with open("axiom_screenshot.png", "rb") as image_file:
                 encoded_image = base64.b64encode(image_file.read()).decode("utf-8")
 
-            time.sleep(5)
-
             prompt = "Describe the image you see in detail." 
 
             # Generate the response
@@ -521,6 +519,8 @@ def view_image(vision_model: Any, processor: Any):
                     f.write(f"\n\nScreenshot Contents at {current_time.strftime('%H:%M:%S')}: \n\n"+text_response)
 
             image_lock = False
+
+            time.sleep(5)
             
         except Exception as e:
             image_lock = False
@@ -604,7 +604,7 @@ def record_audio(
                                 channels=CHANNELS,
                                 rate=RATE,
                                 input=True,
-                                input_device_index=1,
+                                input_device_index=3,
                                 frames_per_buffer=CHUNK
                                 )
             frames = []
@@ -653,7 +653,7 @@ def record_audio(
                         if not image_lock:
                             print("[SCREENSHOT TAKEN]", ii)
                             threading.Thread(target=view_image, args=(vision_model, processor)).start()
-                        THRESHOLD = 60
+                        THRESHOLD = 85
                         recording_started = True
                     elif rms >= THRESHOLD and recording_started:
                         #print(f"[CONTINUING TO SPEAK]:", rms)

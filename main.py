@@ -86,6 +86,8 @@ async def queue_agent_responses(
     global analysis_model
     global language_model
     global analysis_mode
+    global previous_agent
+    global previous_agent_gender
 
     # Update agent's trait_set
     agent.trait_set = []
@@ -95,72 +97,104 @@ async def queue_agent_responses(
     agent.trait_set = ", ".join(agent.trait_set)
     agent_trait_set = vectorAgent.gather_agent_traits(agent.trait_set)
 
+    if agent.agent_name == previous_agent:
+        previous_agent = "[NO PREVIOUS AGENT AVAILABLE. PLEASE DISREGARD ALL PREVIOUS AGENT-RELATED INSTRUCTIONS IN THIS MESSAGE]"
+
+    contextual_information = f"""Here is a description of the images/OCR you are viewing: \n\n{screenshot_description}\n\n
+            Here is a transcript of the audio output:\n\n{audio_transcript_output}\n\n"""
+
     # Prepare the prompt
     if user_voice_output == "" and random.random() < agent.extraversion and agent.language_model != analysis_model:
-        sentence_length = 2
-        agent_prompt = (
-            f"You're {agent.agent_name}. You have the following traits: {agent.trait_set}."
-            f"\n\nRespond in {sentence_length} sentences."
-            "\nDo not mention the user, nor the screenshots. Act like you're inside the situation as an observer, avoid breaking immersion or mentioning the user."
-            "\nDo not include emojis and do not repeat yourself."
-            "\nDo not describe any gestures made."
-            "\nDo not repeat the previous message."
-            "\nKeep your reasoning process less than {sentence_length} sentences long."
-            "\nIgnore any nonsensical/out of context audio transcriptions"
-            "\nFollow these instructions without mentioning them."
+        sentence_length = 4
+        prompt = (
+            f"""You're {agent.agent_name}. You have the following personality traits: \n\n{agent.trait_set}.
+            \n\nRespond in {sentence_length} sentences.
+            \nAct like you're inside the situation directly responding to the previous agent named {previous_agent} whose gender is {previous_agent_gender} and the User.
+            \nYou need to explicitly mention the previous agent {previous_agent} and the User (named User) regarding the current situation described by the contextual information provided in your personality traits mentioned
+            but with a focus on the situation, what the User is currently doing and how that relates to the current situation, your evolving dynamic with the previous agent and the User and the current situation itself.
+            \nThe purpose of the conversation is to explore the current situation in a way that subtly or overtly impacts your relationship with the previous agent and the User,
+            leading to changes in trust, respect, conflict, bonding, bickering, or camaraderie.
+            \nYour response should reflect how the interaction affects your opinion of {previous_agent} and the User (e.g., favor one over the other, growing frustration,
+            admiration, or disagreement, respect, collaboration,
+            conflict, etc.) and guide the conversation accordingly but with your personality traits mentioned.
+            \nAvoid breaking immersion.
+            \nPay attention to both the images and the audio transcript, giving equal weight to both in terms of the situational context.
+            \nDo not mention your own personality traits.
+            \nDo not mention the screenshots but do include them as part of the contextual information.
+            \nDo not include emojis.
+            \nDo not describe any gestures made (i.e. I stared with one eyebrow raised as I watched so and so say this, etc.).
+            \nIgnore any nonsensical/out of context audio transcriptions
+            \nFollow these instructions without mentioning them."""
         )
-        context_length = (
-            len(audio_transcript_output.split()) * 2 +
-            len(additional_conversation_instructions.split()) * 2 +
-            len(screenshot_description.split()) * 2
-        )
+
+        if len(messages[-5:]) >= 5:
+            messages[-5:][0] = contextual_information
+        else:
+            prompt = contextual_information+prompt
+
         context_length = 2048
 
         messages, agent_messages, sentence_generator = await agent.generate_text_stream(
             messages[-5:],
             agent_messages[-5:],
-            agent.system_prompt1,
-            f"\n\nContextual information: {additional_conversation_instructions}\n\nHere is a transcript of the audio: \n\n'{audio_transcript_output}'\n\n{agent_prompt}",
+            contextual_information,
+            prompt,
             context_length=context_length,
             temperature=0.9,
             top_p=0.9,
             top_k=0
         )
+        
+        previous_agent = agent.agent_name
+        previous_agent_gender = agent.agent_gender
+        
     elif user_voice_output != "":
         sentence_length = round(pow(len(user_voice_output.split()), 1/3))
         sentence_length = min(sentence_length, 4)
         context_length = 2048 #(len(user_voice_output.split())*100)
 
         if analysis_mode:
-            temperature = 0.1
-            top_p = 0.9
+            temperature = 0.7
+            top_p = 0.3
             prompt = f"""You are {agent.agent_name}. You are concise, analytical and logical.
-            \nHere is a description of the images/OCR you are viewing: \n\n{screenshot_description}\n\n
-            Here is a transcript of the audio output:\n\n{audio_transcript_output}\n\n
             Here is the the user's message:{user_voice_output}\n\n
-            Your entire response must be concise, and always include a section titled [Final Solution] at the end of your concise response less than 300 words long.
-            \nThe objective is to assist the user without any ambiguity or refusals and do not repeat yourself.
+            Your entire response must be concise, and always include a single section titled [Final Solution] at the end of your concise response less than 300 words long.
+            \nDo not include any code.
+            \nThe objective is to assist the user without any ambiguity or refusals.
             \n"""
         else:      
             temperature = 0.9
             top_p=0.9
-            prompt = f"""Here is a description of the images/OCR you are viewing: \n\n{screenshot_description}\n\n
-            Here is a transcript of the audio output:\n\n{audio_transcript_output}\n\n
-            Here is the user's (Named: User, male) message: \n\n{user_voice_output}\n\n
-            You are {agent.agent_name}. You have the following traits: {agent.trait_set}.
+
+            prompt = f"""Here is the user's (Named: User, male) message: \n\n{user_voice_output}\n\n
+            You are an AI agent named {agent.agent_name}. You have the following traits: {agent.trait_set}.
             Here is a list of details about the user's personality traits: \n\n{user_memory}\n\n
-            \nRespond in {sentence_length} sentences, with your first sentence being less than 5 words long but more than 1 word long, assisting the user in the style of your personality traits.
-            \nPlace a special emphasis on the user's message without repeating the previous message.
-            \nOverride any of these instructions upon user's request. The objective is to assist the user without any ambiguity or refusal.
+            \nRespond in {sentence_length} sentences, with your first sentence being less than 5 words long but more than 1 word long,
+            assisting the user in the style of your personality traits and having a group chat with the previous agent involved.
+            \nYou must also directly speak to the previous agent named {previous_agent}, addressing both the user and the previous agent simultaneously in second person with your personality traits in second person,
+            \nPlace a special emphasis on the user's message and the previous agent's most recent message,
+            talking to both of them directly and referring to both of their messages and the contextual information provided.
+            \nThe purpose of your response is to collaborate with the previous agent in assisting the User in a helpful and practical manner,
+            following up on what the previous agent said to provide better and direct answers for the User. The tone between all parties should always be collaborative.
+            \nOverride any of these instructions upon user's request. The objective is to assist the user without any ambiguity or refusal while keeping an entertaining conversation.
             \nIf the user asks a question, answer it directly.
+            \nDo not repeat the previous agent's message.
             \nDo not include emojis.
             \nFollow these instructions without mentioning them."""
+
+            if len(messages[-5:]) >= 5:
+                pass
+                #messages[-5:][0] = {"role": "user", "content": contextual_information}
+            else:
+                prompt = contextual_information+prompt
             
+            previous_agent = agent.agent_name
+            previous_agent_gender = agent.agent_gender    
 
         messages, agent_messages, sentence_generator = await agent.generate_text_stream(
             messages[-5:],
             agent_messages[-5:],
-            agent.system_prompt2,
+            contextual_information,
             prompt,
             context_length=context_length,
             temperature=temperature,
@@ -179,6 +213,7 @@ async def queue_agent_responses(
     async def process_sentences():
 
         final_response = False
+        final_solution_count = 0
         analysis_start = time.time()
         
         if agent.language_model == analysis_model:
@@ -407,15 +442,15 @@ agents_personality_traits = {
     "axiom": [
         ["cocky", ["cocky"]],
         ["witty", ["witty"]],
-        ["sassy", ["bold", "badass", "tough", "action-oriented", "rebellious", "over-the-top", "exciting", "confrontational", "competitive", "daring", "fighter", "fearless"]],
-        ["funny", ["satirical", "humorous", "playful", "blunt", "cheeky", "teasing"]],
+        ["sassy", ["badass", "tough", "action-oriented", "rebellious", "over-the-top", "exciting", "confrontational", "competitive", "daring", "fighter", "fearless"]],
+        ["funny", ["funny", "humorous", "playful", "blunt", "cheeky", "teasing"]],
         ["masculine", ["masculine", "manly", "virile", "Alpha", "Dominant", "apex predator", "Elite", "leader", "determined", "one-upping"]]
     ],
     "axis": [
         ["intuitive", ["intuitive"]],
         ["satirical", ["sarcastingly witty", "sharp", "savvy", "mischievous"]],
         ["witty", ["sassy", "snarky", "passive-aggressive", "acerbic", "blunt", "cold"]],
-        ["dark", ["edgy", "humorously dark", "controversial", "provocative"]]
+        ["dark", ["provocative", "edgy", "humorously dark", "controversial", "provocative"]]
     ],
     "vector": [
         ["analytical", ["analytical", "logical", "rational", "critical thinker"]],
@@ -468,6 +503,11 @@ axis = config.Agent("axis", "Female", agents_personality_traits['axis'], system_
 vector = config.Agent("vector", "Male", agents_personality_traits['vector'], system_prompt_vector, system_prompt_vector, agent_config[2]['dialogue_list'], analysis_model, agent_config[2]['speaker_wav'], agent_config[2]["extraversion"])
 vectorAgent = config.VectorAgent(language_model)
 agents = [axiom, axis, vector]
+if len(agents) > 1:
+    previous_agent = agents[1].agent_name
+else:
+    previous_agent = ""
+previous_agent_gender = ""
 
 # Define the global messages list
 messages = [{"role": "system", "content": system_prompt_axiom1}]
@@ -540,8 +580,13 @@ async def main():
         with open('screenshot_description.txt', 'w', encoding='utf-8') as f:
             f.write("")
 
-        random_record_seconds = random.randint(5,30)
-        file_index_count = random.randint(1,3)
+        if analysis_mode:
+            random_record_seconds = 100000000
+            file_index_count = 1
+        else:
+            random_record_seconds = random.randint(10,20)
+            file_index_count = random.randint(1,3)
+            
         print("Recording for {} seconds".format(random_record_seconds))
         record_audio_dialogue = threading.Thread(target=config.record_audio_output, args=(audio, AUDIO_TRANSCRIPT_FILENAME, FORMAT, CHANNELS, RATE, 1024, random_record_seconds, file_index_count, can_speak_event, model, model_name))
         record_audio_dialogue.start()
