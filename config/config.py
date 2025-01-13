@@ -589,6 +589,7 @@ def record_audio(
     global image_lock
     
     ii = 0
+    recording_index = 0
     
     try:
         while True:
@@ -609,7 +610,6 @@ def record_audio(
                                 )
             frames = []
             image_path = None
-            recording_index = 0
 
             # Record for RECORD_SECONDS
             silence_start = None
@@ -685,7 +685,8 @@ def record_audio(
                                 frames_per_buffer=CHUNK
                                 )
                             recording_index += 1
-                            recording_start_time = time.time() 
+                            recording_start_time = time.time()
+                            frames = []
                             
                 if rms < THRESHOLD and recording_started:
                     if time.time() - silence_start > SILENCE_LIMIT:
