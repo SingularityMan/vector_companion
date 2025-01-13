@@ -646,6 +646,7 @@ async def main():
 
     global can_speak_event_asyncio
     global analysis_mode
+    global mute_mode
     user_memory_task = None
         
     while True:
@@ -658,8 +659,8 @@ async def main():
         with open('screenshot_description.txt', 'w', encoding='utf-8') as f:
             f.write("")
 
-        if analysis_mode:
-            random_record_seconds = 100000000
+        if analysis_mode or mute_mode:
+            random_record_seconds = 10000000000000
             file_index_count = 1
         else:
             random_record_seconds = random.randint(10,15)
