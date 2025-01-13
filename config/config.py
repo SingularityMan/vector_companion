@@ -520,7 +520,7 @@ def view_image(vision_model: Any, processor: Any):
 
             image_lock = False
 
-            time.sleep(5)
+            time.sleep(2)
             
         except Exception as e:
             image_lock = False
@@ -722,7 +722,7 @@ def record_audio_output(
         for i in range(p.get_device_count()):
             device_info = p.get_device_info_by_index(i)
             #print(device_info)
-            if 'VB-Audio' in device_info['name']:  # Look for 'VB-Audio' instead of 'VB-Cable'
+            if 'CABLE Output (VB-Audio Virtual' in device_info['name']:  # Look for 'VB-Audio' instead of 'VB-Cable'
                 device_index = i
                 break
 
@@ -736,7 +736,7 @@ def record_audio_output(
                         rate=RATE,
                         input=True,
                         frames_per_buffer=CHUNK,
-                        input_device_index=2)
+                        input_device_index=device_index)
 
         print("* recording Audio Transcript")
 

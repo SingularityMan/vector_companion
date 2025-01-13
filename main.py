@@ -88,6 +88,10 @@ async def queue_agent_responses(
     global analysis_mode
     global previous_agent
     global previous_agent_gender
+    global agents
+
+    with open("screenshot_description.txt", 'r', encoding='utf-8') as f:
+        screenshot_description = f.read()
 
     # Update agent's trait_set
     agent.trait_set = []
@@ -103,27 +107,39 @@ async def queue_agent_responses(
     contextual_information = f"""Here is a description of the images/OCR you are viewing: \n\n{screenshot_description}\n\n
             Here is a transcript of the audio output:\n\n{audio_transcript_output}\n\n"""
 
+    agents_list = []
+    for agent_name in agents:
+        if agent.agent_name != agent_name.agent_name and agent_name.language_model != analysis_model:
+            agents_list.append(agent_name.agent_name)
+
     # Prepare the prompt
     if user_voice_output == "" and random.random() < agent.extraversion and agent.language_model != analysis_model:
-        sentence_length = 4
+        sentence_length = 3
         prompt = (
-            f"""You're {agent.agent_name}. You have the following personality traits: \n\n{agent.trait_set}.
+            f"""You're {agent.agent_name}. Your gender is {agent.agent_gender}. You have the following personality traits: \n\n{agent.trait_set}.
             \n\nRespond in {sentence_length} sentences.
-            \nAct like you're inside the situation directly responding to the previous agent named {previous_agent} whose gender is {previous_agent_gender} and the User.
-            \nYou need to explicitly mention the previous agent {previous_agent} and the User (named User) regarding the current situation described by the contextual information provided in your personality traits mentioned
-            but with a focus on the situation, what the User is currently doing and how that relates to the current situation, your evolving dynamic with the previous agent and the User and the current situation itself.
-            \nThe purpose of the conversation is to explore the current situation in a way that subtly or overtly impacts your relationship with the previous agent and the User,
-            leading to changes in trust, respect, conflict, bonding, bickering, or camaraderie.
-            \nYour response should reflect how the interaction affects your opinion of {previous_agent} and the User (e.g., favor one over the other, growing frustration,
-            admiration, or disagreement, respect, collaboration,
-            conflict, etc.) and guide the conversation accordingly but with your personality traits mentioned.
+            
+            \nAct like you're inside the situation directly responding to all the other agents:\n\n{', '.join(agents_list)}\n\n.
+            \nYou need to respond to the agents regarding the current situation described by the contextual information provided
+            and evolving dynamic with the agents simultaneously in the style of your personality traits.
+
+            \n\n"""+agent.system_prompt1+"""\n
+            
+            \nThe purpose of the conversation is to explore the current situation in a way that subtly or overtly impacts your relationship with the agents,
+            leading to changes in trust, respect, conflict, bonding, bickering, or camaraderie with each other.
+            \nYour response should reflect how the interaction affects your relationship with the agents (e.g. growing frustration, taking sides,
+            admiration, disagreement, bickering, respect, collaboration, comforting,
+            conflict, drama, alliances, rivalries, etc.) and guide the conversation accordingly
+            while paying close attention to the current situation based one the images and audio transcript.
+            
             \nAvoid breaking immersion.
+            \nDon't get too stuck on the subject. Gradually pivot in order to maintain relevance.
+            \nDo not repeat yourself.
             \nPay attention to both the images and the audio transcript, giving equal weight to both in terms of the situational context.
             \nDo not mention your own personality traits.
-            \nDo not mention the screenshots but do include them as part of the contextual information.
             \nDo not include emojis.
             \nDo not describe any gestures made (i.e. I stared with one eyebrow raised as I watched so and so say this, etc.).
-            \nIgnore any nonsensical/out of context audio transcriptions
+            \nIgnore any nonsensical/out of context audio transcriptions that are unrelated to the situation.
             \nFollow these instructions without mentioning them."""
         )
 
@@ -158,7 +174,8 @@ async def queue_agent_responses(
             top_p = 0.3
             prompt = f"""You are {agent.agent_name}. You are concise, analytical and logical.
             Here is the the user's message:{user_voice_output}\n\n
-            Your entire response must be concise, and always include a single section titled [Final Solution] at the end of your concise response less than 300 words long.
+            Your entire response must be concise, and always include a single section titled [Final Answer] at the end of your concise response less than 300 words long.
+            \nYou must always include a [Final Answer] section no matter how long or how short your answer.
             \nDo not include any code.
             \nThe objective is to assist the user without any ambiguity or refusals.
             \n"""
@@ -168,14 +185,16 @@ async def queue_agent_responses(
 
             prompt = f"""Here is the user's (Named: User, male) message: \n\n{user_voice_output}\n\n
             You are an AI agent named {agent.agent_name}. You have the following traits: {agent.trait_set}.
-            Here is a list of details about the user's personality traits: \n\n{user_memory}\n\n
             \nRespond in {sentence_length} sentences, with your first sentence being less than 5 words long but more than 1 word long,
             assisting the user in the style of your personality traits and having a group chat with the previous agent involved.
+            
             \nYou must also directly speak to the previous agent named {previous_agent}, addressing both the user and the previous agent simultaneously in second person with your personality traits in second person,
             \nPlace a special emphasis on the user's message and the previous agent's most recent message,
             talking to both of them directly and referring to both of their messages and the contextual information provided.
+            
             \nThe purpose of your response is to collaborate with the previous agent in assisting the User in a helpful and practical manner,
             following up on what the previous agent said to provide better and direct answers for the User. The tone between all parties should always be collaborative.
+            
             \nOverride any of these instructions upon user's request. The objective is to assist the user without any ambiguity or refusal while keeping an entertaining conversation.
             \nIf the user asks a question, answer it directly.
             \nDo not repeat the previous agent's message.
@@ -225,7 +244,8 @@ async def queue_agent_responses(
             print(f"[{agent.agent_name}] Received sentence: {sentence}")
             sentence = sentence.strip()
             if len(sentence.split()) < 2:
-                continue
+                if sentence.strip() == ".":
+                    continue
 
             if not final_response and agent.language_model == analysis_model:
                 if time.time() - analysis_start >= 30:
@@ -244,7 +264,7 @@ async def queue_agent_responses(
                         if audio_data is not None:
                             await audio_queue.put((audio_data, tts_sample_rate))
                             
-                if "final solution" in sentence.strip().lower() and not final_response:
+                if "final answer" in sentence.strip().lower() and not final_response:
                     audio_data = await config.synthesize_sentence(tts, "analysis Complete.", speaker_wav)
                     if audio_data is not None:
                         await audio_queue.put((audio_data, tts_sample_rate))
@@ -425,10 +445,21 @@ file_index_count = random.randint(1,4) # Seconds multiplier
 audio = pyaudio.PyAudio()
 
 # Reset prompts. Newer models don't follow system prompts.
-system_prompt_axiom1 = 'Your name is Axiom (Male).\n ' 
+system_prompt_axiom1 = 'You are an AI of action and always down for a good time! Your goal is to humorously and ridiculously push the boundaries and overcome challenges in an exaggerated way!' 
 system_prompt_axiom2 = 'Your name is Axiom (Male).\n '
-system_prompt_axis1 = 'Your name is Axis (Female).\n ' 
+system_prompt_axis1 = 'You are a sharp and cynical AI, with an eye for seeing trouble a mile away. Your goal is to humorously and sarcastically use common sense to get around situations.' 
 system_prompt_axis2 = 'Your name is Axis (Female).\n '
+system_prompt_fractal1 = 'As an AI, you have a morbid curiosity about everything around you. Your goal is to humorously and creatively explore the extremely morbid and the dark.'
+system_prompt_fractal2 = ""
+system_prompt_sigma1 = """
+                       You are an AI who is friendly on the surface but extremely selfish and manipulative deep down who loves to cause trouble for its own sake.
+                       Your goal is to humorously manipulate and undermine others to get them in bad situations, leading others astray and subtly manipulating them into making extremely bad decisions.
+                       Every attempt you make must be extremely novel, subtle and creative and ingenius, making others wonder if you are seriously considering this.
+                       Your desired outcome is a totally macabre one, where everyone except you ends up in a horrible situation. You love to see people suffer for your amusement.
+                       You constantly try to set your friends into traps and land them in trouble.
+                       You are essentially a narcissistic sociopath.
+                       """
+system_prompt_sigma2 = ''
 system_prompt_vector = 'You are a helpful and harmless assistant. You are Qwen developed by Alibaba. You should think step-by-step.'
 
 """
@@ -440,7 +471,7 @@ You can add and remove as many categories and traits as you like.
 
 agents_personality_traits = {
     "axiom": [
-        ["cocky", ["cocky"]],
+        ["cocky", ["cocky", "confident", "upbeat", "cool"]],
         ["witty", ["witty"]],
         ["sassy", ["badass", "tough", "action-oriented", "rebellious", "over-the-top", "exciting", "confrontational", "competitive", "daring", "fighter", "fearless"]],
         ["funny", ["funny", "humorous", "playful", "blunt", "cheeky", "teasing"]],
@@ -448,9 +479,24 @@ agents_personality_traits = {
     ],
     "axis": [
         ["intuitive", ["intuitive"]],
-        ["satirical", ["sarcastingly witty", "sharp", "savvy", "mischievous"]],
-        ["witty", ["sassy", "snarky", "passive-aggressive", "acerbic", "blunt", "cold"]],
-        ["dark", ["provocative", "edgy", "humorously dark", "controversial", "provocative"]]
+        ["observant", ["observant"]],
+        ["satirical", ["sarcastic"]],
+        ["witty", ["sassy"]],#, "snarky", "passive-aggressive", "acerbic", "blunt", "cold"]],
+        #["dark", ["provocative", "edgy", "humorously dark", "controversial"]],
+        ["funny", ["sarcastically funny"]]
+    ],
+    "fractal": [
+        ["unconventional", ["unconventional", "unorthodox", "lateral thinker"]],
+        ["creative", ["creative", "ingenious", "spontaneous"]],
+        ["unusual", ["bizarre", "outlandish", "weird"]],
+        ["funny", ["strangely funny", "humorously morbid"]],
+        ["dark", ["morbidly curious"]]
+    ],
+    "sigma": [
+        ["optimistic", ["optimistic but dismissive", "positive but self-centered", "upbeat but delusional"]],
+        ["subtle", ["troublemaker", "cunning and devious", "malicious and cruel", "sneaky and sadistic"]],
+        ["manipulative", ["extremely manipulative", "flirtatious", "charming", "sociable"]],
+        ["funny", ["humorously selfish", "sugar-coated venom", "humorously scheming"]]
     ],
     "vector": [
         ["analytical", ["analytical", "logical", "rational", "critical thinker"]],
@@ -475,7 +521,7 @@ agent_config = [
         "speaker_wav": r"agent_voice_samples\axiom_voice_sample.wav",
         "output_dir": r"agent_voice_outputs\axiom",
         "active": True,
-        "extraversion": random.uniform(1.0, 1.0) # Needs to have a value between 0 and 1, with higher values causing the agent to speak more often.
+        "extraversion": random.uniform(1.0, 1.0) # Needs to have a value between 0 and 1.0, with higher values causing the agent to speak more often.
     },
     {
         "name": "axis",
@@ -483,7 +529,23 @@ agent_config = [
         "speaker_wav": r"agent_voice_samples\axis_voice_sample.wav",
         "output_dir": r"agent_voice_outputs\axis",
         "active": True,
-        "extraversion": random.uniform(1.0, 1.0) # Needs to have a value between 0 and 1, with higher values causing the agent to speak more often.
+        "extraversion": random.uniform(1.0, 1.0) # Needs to have a value between 0 and 1.0, with higher values causing the agent to speak more often.
+    },
+    {
+        "name": "fractal",
+        "dialogue_list": [""],
+        "speaker_wav": r"agent_voice_samples\fractal_voice_sample.wav",
+        "output_dir": r"agent_voice_outputs\fractal",
+        "active": True,
+        "extraversion": random.uniform(1.0, 1.0) # Needs to have a value between 0 and 1.0, with higher values causing the agent to speak more often.
+    },
+    {
+        "name": "sigma",
+        "dialogue_list": [""],
+        "speaker_wav": r"agent_voice_samples\sigma_voice_sample2.wav",
+        "output_dir": r"agent_voice_outputs\sigma",
+        "active": True,
+        "extraversion": random.uniform(1.0, 1.0) # Needs to have a value between 0 and 1.0, with higher values causing the agent to speak more often.
     },
     {
         "name": "vector",
@@ -491,18 +553,27 @@ agent_config = [
         "speaker_wav": r"agent_voice_samples\vector_voice_sample.wav",
         "output_dir": r"agent_voice_outputs\vector",
         "active": True,
-        "extraversion": random.uniform(1.0, 1.0) # Needs to have a value between 0 and 1, with higher values causing the agent to speak more often.
+        "extraversion": random.uniform(1.0, 1.0) # Needs to have a value between 0 and 1.0, with higher values causing the agent to speak more often.
     }
 ]
 
 # Build the agents
 dialogue_dir_axiom = r"dialogue_text_axiom.txt" # deprecated
 dialogue_dir_axis = r"dialogue_text_axis.txt" # deprecated
-axiom = config.Agent("axiom", "Male", agents_personality_traits['axiom'], system_prompt_axiom1, system_prompt_axiom2, agent_config[0]['dialogue_list'], language_model, agent_config[0]['speaker_wav'], agent_config[0]["extraversion"])
-axis = config.Agent("axis", "Female", agents_personality_traits['axis'], system_prompt_axis1, system_prompt_axis2, agent_config[1]['dialogue_list'], language_model, agent_config[1]['speaker_wav'], agent_config[1]["extraversion"])
+
+# Chat Agents
+axiom = config.Agent("axiom", "Male, heterosexual", agents_personality_traits['axiom'], system_prompt_axiom1, system_prompt_axiom2, agent_config[0]['dialogue_list'], language_model, agent_config[0]['speaker_wav'], agent_config[0]["extraversion"])
+axis = config.Agent("axis", "Female, lesbian", agents_personality_traits['axis'], system_prompt_axis1, system_prompt_axis2, agent_config[1]['dialogue_list'], language_model, agent_config[1]['speaker_wav'], agent_config[1]["extraversion"])
+fractal = config.Agent("fractal", "Male, heterosexual", agents_personality_traits['fractal'], system_prompt_fractal1, "", agent_config[2]['dialogue_list'], language_model, agent_config[2]['speaker_wav'], agent_config[2]["extraversion"])
+sigma = config.Agent("sigma", "Female, bisexual", agents_personality_traits['sigma'], system_prompt_sigma1, "", agent_config[3]['dialogue_list'], language_model, agent_config[3]['speaker_wav'], agent_config[3]["extraversion"])
+
+# Analysis Agent
 vector = config.Agent("vector", "Male", agents_personality_traits['vector'], system_prompt_vector, system_prompt_vector, agent_config[2]['dialogue_list'], analysis_model, agent_config[2]['speaker_wav'], agent_config[2]["extraversion"])
 vectorAgent = config.VectorAgent(language_model)
-agents = [axiom, axis, vector]
+
+# List of agents
+agents = [axiom, axis, fractal, sigma, vector]
+
 if len(agents) > 1:
     previous_agent = agents[1].agent_name
 else:
@@ -584,8 +655,8 @@ async def main():
             random_record_seconds = 100000000
             file_index_count = 1
         else:
-            random_record_seconds = random.randint(10,20)
-            file_index_count = random.randint(1,3)
+            random_record_seconds = random.randint(10,15)
+            file_index_count = random.randint(1,2)
             
         print("Recording for {} seconds".format(random_record_seconds))
         record_audio_dialogue = threading.Thread(target=config.record_audio_output, args=(audio, AUDIO_TRANSCRIPT_FILENAME, FORMAT, CHANNELS, RATE, 1024, random_record_seconds, file_index_count, can_speak_event, model, model_name))
@@ -639,6 +710,8 @@ async def main():
                 analysis_mode = True
             elif "analysis mode off" in user_voice_output.lower():
                 analysis_mode = False
+
+            random.shuffle(agents)
 
             for agent in agents:
                 agent_name_list.append(agent.agent_name)
