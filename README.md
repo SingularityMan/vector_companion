@@ -1,6 +1,6 @@
 # Vector Companion
 
-Your friendly AI Companion, with two distinct personalities: Axiom and Axis! Here to accompany you everywhere you go on your computer!
+Your friendly AI Companion, with two distinct personalities: Axiom, Axis and the gang! Here to accompany you everywhere you go on your computer!
 
 ![image](https://github.com/user-attachments/assets/11cbbdec-51fb-4551-938a-3ff40fe4432f)
 
@@ -19,9 +19,9 @@ Your friendly AI Companion, with two distinct personalities: Axiom and Axis! Her
 
 ## Introduction
 
-Whether playing games, watching videos, or browsing online, Axiom and Axis will talk to each other about whatever you're doing and will also talk to you directly! The motivation behind this project is to create not one, but two multimodal virtual companions who are very lifelike, responsive, and charming. They can see, hear, and speak about anything presented to them on screen!
+Whether playing games, watching videos, or browsing online, These agents will talk to each other about whatever you're doing and will also talk to you directly when prompted! The motivation behind this project is to create not one, but multiple multimodal virtual companions who are very lifelike, responsive, and charming. They can see, hear, and speak about anything presented to them on screen!
 
-They transcribe audio output and user microphone input simultaneously while periodically taking screenshots and viewing/reading OCR text on screen. They use this information to form a conversation, with the ability to remember past key events and summarize the conversation history periodically, enabling them to pick up where you left off.
+They transcribe audio output and user microphone input simultaneously while periodically taking screenshots and viewing/reading OCR text on screen. They use this information to form a conversation and chat about anything and everything under the sun!
 
 ## Features
 
