@@ -56,9 +56,10 @@ tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True).to
 tts.synthesizer.use_cuda = True
 tts.synthesizer.fp16 = True
 tts.synthesizer.stream = True
-language_model = "gemma2:2b-instruct-q8_0" # Used for general chatting.
+language_model = "gemma2:27b-instruct-q8_0" # Used for general chatting.
 analysis_model = "qwq:32b-preview-q8_0" # REPLACE WITH WHATEVER MODEL YOU'D LIKE. CANNOT BE THE SAME MODEL AS language_model.
 analysis_mode = False
+mute_mode = False
 
 
 async def queue_agent_responses(
@@ -572,7 +573,13 @@ vector = config.Agent("vector", "Male", agents_personality_traits['vector'], sys
 vectorAgent = config.VectorAgent(language_model)
 
 # List of agents
-agents = [axiom, axis, fractal, sigma, vector]
+agents = [
+    axiom,
+    axis,
+    #fractal,
+    #sigma,
+    vector
+    ]
 
 if len(agents) > 1:
     previous_agent = agents[1].agent_name
@@ -705,11 +712,18 @@ async def main():
             
             agent_name_list = []
             agents_mentioned = []
-            
+
+            # Toggle Analysis Mode
             if "analysis mode on" in user_voice_output.lower():
                 analysis_mode = True
             elif "analysis mode off" in user_voice_output.lower():
                 analysis_mode = False
+
+            # Toggle Mute Mode
+            if "mute mode on" in user_voice_output.lower():
+                mute_mode = True
+            elif len(user_voice_output.split()) > 3:
+                mute_mode = False
 
             random.shuffle(agents)
 
@@ -717,7 +731,9 @@ async def main():
                 agent_name_list.append(agent.agent_name)
 
             for agent in agents:
-                if analysis_mode:
+                if mute_mode:
+                    break
+                elif analysis_mode:
                     if agent.language_model != analysis_model:
                         continue
                 else:
@@ -741,7 +757,7 @@ async def main():
             with open('conversation_history.json', 'w') as f:
                 json.dump(messages, f)
 
-            if user_voice_output != "" and not analysis_mode:
+            if user_voice_output != "" and not analysis_mode and not mute_mode:
                 user_memory_task = None
                 # Schedule the task without awaiting it
                 user_memory_task = config.asyncio.create_task(
