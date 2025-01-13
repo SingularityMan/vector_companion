@@ -103,7 +103,7 @@ async def queue_agent_responses(
     agent_trait_set = vectorAgent.gather_agent_traits(agent.trait_set)
 
     if agent.agent_name == previous_agent:
-        previous_agent = "[NO PREVIOUS AGENT AVAILABLE. PLEASE DISREGARD ALL PREVIOUS AGENT-RELATED INSTRUCTIONS IN THIS MESSAGE]"
+        previous_agent = ""
 
     contextual_information = f"""Here is a description of the images/OCR you are viewing: \n\n{screenshot_description}\n\n
             Here is a transcript of the audio output:\n\n{audio_transcript_output}\n\n"""
@@ -437,7 +437,7 @@ CHANNELS = 1  # Mono channel
 RATE = 16000  # Sample Rate
 CHUNK = 1024  # Buffer Size
 RECORD_SECONDS = 30  # Record time
-WAVE_OUTPUT_FILENAME = "voice_recording.wav"
+WAVE_OUTPUT_FILENAME = "voice_recording"
 AUDIO_TRANSCRIPT_FILENAME = "audio_transcript_output.wav"
 THRESHOLD = 650  # Audio levels below this are considered silence.
 SILENCE_LIMIT = 1 # Silence limit in seconds. The recording ends if SILENCE_LIMIT seconds of silence are detected.
@@ -697,13 +697,21 @@ async def main():
         if len(audio_transcript_output.strip().split()) <= 6:
             audio_transcript_output = ""
 
-        if os.path.exists(WAVE_OUTPUT_FILENAME):
+        user_voice_output = ""
+
+        for file in os.listdir(os.getcwd()):
+            if WAVE_OUTPUT_FILENAME in file:
+                user_text = config.transcribe_audio(model, model_name, file)
+                if len(user_text) > 2:
+                    user_voice_output += " "+user_text 
+
+        """if os.path.exists(WAVE_OUTPUT_FILENAME):
             user_voice_output = config.transcribe_audio(model, model_name, WAVE_OUTPUT_FILENAME)
             if len(user_voice_output.split()) < 3:
                 user_voice_output = ""
         else:
             print("No user voice output transcribed")
-            user_voice_output = ""
+            user_voice_output = """""
 
         vector_text = ""
         vector_text = "Here is the screenshot description: "+screenshot_description
@@ -723,7 +731,7 @@ async def main():
             # Toggle Mute Mode
             if "mute mode on" in user_voice_output.lower():
                 mute_mode = True
-            elif len(user_voice_output.split()) > 3:
+            elif "mute mode off" in user_voice_output.lower():
                 mute_mode = False
 
             random.shuffle(agents)
@@ -732,7 +740,7 @@ async def main():
                 agent_name_list.append(agent.agent_name)
 
             for agent in agents:
-                if mute_mode:
+                if mute_mode and len(user_voice_output.split()) < 3:
                     break
                 elif analysis_mode:
                     if agent.language_model != analysis_model:

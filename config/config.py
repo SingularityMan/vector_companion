@@ -609,6 +609,7 @@ def record_audio(
                                 )
             frames = []
             image_path = None
+            recording_index = 0
 
             # Record for RECORD_SECONDS
             silence_start = None
@@ -649,6 +650,8 @@ def record_audio(
                     silence_start = time.time()
                     if not recording_started:
                         SILENCE_LIMIT = 0.75
+                        recording_start_time = time.time()
+                        recording_index = 1
                         print("recording...")
                         if not image_lock:
                             print("[SCREENSHOT TAKEN]", ii)
@@ -659,6 +662,31 @@ def record_audio(
                         #print(f"[CONTINUING TO SPEAK]:", rms)
                         silence_start = time.time()
                         can_speak_event.set()
+                        
+                        if time.time() - recording_start_time >= 30:
+
+                            # Stop Recording
+                            stream.stop_stream()
+                            stream.close()
+
+                            # Write your new .wav file with built-in Python 3 Wave module
+                            waveFile = wave.open(WAVE_OUTPUT_FILENAME+str(recording_index)+".wav", 'wb')
+                            waveFile.setnchannels(CHANNELS)
+                            waveFile.setsampwidth(audio.get_sample_size(FORMAT))
+                            waveFile.setframerate(RATE)
+                            waveFile.writeframes(b''.join(frames))
+                            waveFile.close()
+
+                            stream = audio.open(format=FORMAT,
+                                channels=CHANNELS,
+                                rate=RATE,
+                                input=True,
+                                input_device_index=3,
+                                frames_per_buffer=CHUNK
+                                )
+                            recording_index += 1
+                            recording_start_time = time.time() 
+                            
                 if rms < THRESHOLD and recording_started:
                     if time.time() - silence_start > SILENCE_LIMIT:
                         print("finished recording")
@@ -670,13 +698,14 @@ def record_audio(
             if not can_speak_event.is_set():
 
                 image_lock = False
+                recording_index += 1
 
                 # Stop Recording
                 stream.stop_stream()
                 stream.close()
 
                 # Write your new .wav file with built-in Python 3 Wave module
-                waveFile = wave.open(WAVE_OUTPUT_FILENAME, 'wb')
+                waveFile = wave.open(WAVE_OUTPUT_FILENAME+str(recording_index)+".wav", 'wb')
                 waveFile.setnchannels(CHANNELS)
                 waveFile.setsampwidth(audio.get_sample_size(FORMAT))
                 waveFile.setframerate(RATE)
