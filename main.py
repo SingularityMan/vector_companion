@@ -542,7 +542,7 @@ agent_config = [
     {
         "name": "sigma",
         "dialogue_list": [""],
-        "speaker_wav": r"agent_voice_samples\sigma_voice_sample2.wav",
+        "speaker_wav": r"agent_voice_samples\sigma_voice_sample.wav",
         "output_dir": r"agent_voice_outputs\sigma",
         "active": True,
         "extraversion": random.uniform(1.0, 1.0) # Needs to have a value between 0 and 1.0, with higher values causing the agent to speak more often.
