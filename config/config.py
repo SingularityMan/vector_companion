@@ -699,7 +699,6 @@ def record_audio(
             if not can_speak_event.is_set():
 
                 image_lock = False
-                recording_index += 1
 
                 # Stop Recording
                 stream.stop_stream()
@@ -713,6 +712,8 @@ def record_audio(
                 waveFile.writeframes(b''.join(frames))
                 waveFile.close()
 
+                recording_index += 1
+                
                 return True
 
     except Exception as e:
