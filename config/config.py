@@ -24,6 +24,7 @@ import pyaudio
 import wave
 import audioop
 import simpleaudio as sa
+import noisereduce as nr
 from PIL import Image
 import pyautogui as pygi
 from transformers import AutoProcessor, AutoModelForCausalLM
@@ -99,7 +100,8 @@ class Agent():
                         "top_p": top_p,
                         "top_k": top_k,
                         "num_ctx": context_length,
-                        "num_batch": 512
+                        "num_batch": 512,
+                        "num_predict": 5000
                     }
                 )
 
@@ -383,7 +385,7 @@ def clean_text(text):
     text = text.replace('\\n', '')
     return text.strip()
 
-async def synthesize_sentence(tts, sentence, speaker_wav):
+async def synthesize_sentence(tts, sentence, speaker_wav, sample_rate):
     """
     Asynchronously synthesizes a sentence and returns the audio data.
     """
@@ -397,7 +399,32 @@ async def synthesize_sentence(tts, sentence, speaker_wav):
         audio = await loop.run_in_executor(
             None, lambda: tts.tts(text=sentence, speaker_wav=speaker_wav, language="en")
         )
-        return audio
+        # Check the type of 'audio' and process accordingly
+        if isinstance(audio, list):
+            # Convert list to NumPy array
+            audio_array = np.array(audio, dtype=np.float32)
+        elif isinstance(audio, np.ndarray):
+            # If it's already a NumPy array
+            audio_array = audio.astype(np.float32)
+        else:
+            raise TypeError(f"Unexpected audio type: {type(audio)}")
+
+        # Apply noise reduction
+        reduced_noise = nr.reduce_noise(
+        y=audio_array,
+        sr=sample_rate,
+        prop_decrease=0.0,
+        freq_mask_smooth_hz=1000,
+        time_mask_smooth_ms=100,
+        stationary=True,
+        n_fft=512,
+        win_length=512,
+        use_torch=True,
+        device='cuda'
+    )
+
+        return reduced_noise
+        #return audio
     except Exception as e:
         print(f"Error during TTS synthesis for sentence '{sentence}': {e}")
         return None
@@ -507,7 +534,7 @@ def view_image(vision_model: Any, processor: Any):
                     "repeat_penalty": 1.15,
                     "temperature": 0.7,
                     "top_p": 0.9,
-                    "num_ctx": 2048,
+                    "num_ctx": 512,
                     "batch_size": 512
                     }
                 )
@@ -520,7 +547,7 @@ def view_image(vision_model: Any, processor: Any):
 
             image_lock = False
 
-            time.sleep(2)
+            time.sleep(5)
             
         except Exception as e:
             image_lock = False
@@ -651,7 +678,6 @@ def record_audio(
                     if not recording_started:
                         SILENCE_LIMIT = 0.75
                         recording_start_time = time.time()
-                        recording_index = 1
                         print("recording...")
                         if not image_lock:
                             print("[SCREENSHOT TAKEN]", ii)
@@ -812,6 +838,7 @@ def record_audio_output(
                     if len(audio_transcript_output.strip().split()) <= 6:
                         audio_transcript_output = ""
                     audio_transcriptions += " "+audio_transcript_output
+                    audio_transcriptions = audio_transcriptions.strip()
                 else:
                     print("No audio transcribed")
                     #audio_transcriptions = ""
@@ -861,7 +888,7 @@ def transcribe_audio(model: Any, model_name, WAVE_OUTPUT_FILENAME: str, RATE: in
     language="en",
     prompt=None,
     prefix=None,
-    suppress_blank=True,
+    suppress_blank=False,
     fp16=True,
     )
 
@@ -869,6 +896,9 @@ def transcribe_audio(model: Any, model_name, WAVE_OUTPUT_FILENAME: str, RATE: in
     user_voice_output_raw = result.text
     user_voice_output = find_repeated_words(user_voice_output_raw)
     user_voice_output = remove_repetitive_phrases(user_voice_output)
+    if "audio_transcript_output" in WAVE_OUTPUT_FILENAME:
+        if len(user_voice_output.strip().split()) < 6:
+            user_voice_output = ""
     try:
         os.remove(WAVE_OUTPUT_FILENAME)
     except Exception as e:
@@ -877,5 +907,5 @@ def transcribe_audio(model: Any, model_name, WAVE_OUTPUT_FILENAME: str, RATE: in
         return user_voice_output
     
     # Print the recognized text
-    print(user_voice_output)
+    #print(user_voice_output)
     return user_voice_output
