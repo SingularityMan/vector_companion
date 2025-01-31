@@ -361,7 +361,7 @@ def split_buffer_into_sentences(buffer):
     """
     Splits buffer into sentences and returns the remaining buffer.
     """
-    sentence_endings = re.compile(r'([.!?])')
+    sentence_endings = re.compile(r'([.!?>])')
     sentences = []
     while True:
         match = sentence_endings.search(buffer)
@@ -851,7 +851,7 @@ def record_audio_output(
 
         frames = []
 
-def transcribe_audio(model: Any, model_name, WAVE_OUTPUT_FILENAME: str, RATE: int = 16000) -> str:
+def transcribe_audio(model: Any, model_name, WAVE_OUTPUT_FILENAME: str, RATE: int = 16000, probability_threshold=0.2) -> str:
 
     """
     Transcribes audio via whisper
@@ -893,6 +893,11 @@ def transcribe_audio(model: Any, model_name, WAVE_OUTPUT_FILENAME: str, RATE: in
     )
 
     result = whisper.decode(model, mel, options)
+    print("[NO SPEECH PROBABILITY]:", result.no_speech_prob)
+    if result.no_speech_prob > probability_threshold:
+        user_voice_output = ""
+        return user_voice_output
+        
     user_voice_output_raw = result.text
     user_voice_output = find_repeated_words(user_voice_output_raw)
     user_voice_output = remove_repetitive_phrases(user_voice_output)

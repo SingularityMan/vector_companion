@@ -59,7 +59,7 @@ tts.synthesizer.use_cuda = True
 tts.synthesizer.fp16 = True
 tts.synthesizer.stream = True
 language_model = "gemma2:2b-instruct-q8_0" # Used for general chatting.
-analysis_model = "qwq:32b-preview-q8_0" # REPLACE WITH WHATEVER MODEL YOU'D LIKE. CANNOT BE THE SAME MODEL AS language_model.
+analysis_model = "deepseek-r1:14b-qwen-distill-q8_0" # REPLACE WITH WHATEVER MODEL YOU'D LIKE. CANNOT BE THE SAME MODEL AS language_model.
 analysis_mode = False
 mute_mode = False
 
@@ -123,7 +123,7 @@ async def queue_agent_responses(
         prompt = (
             f"""Here is a description of the images/OCR: \n\n{screenshot_description}\n\n
             Here is a transcript of the audio output if it is present (Do not respond directly to this. This is for contextual purposes only):\n\n{audio_transcript_output}\n\n
-            \nRespond in {sentence_length} sentences.
+            \nRespond in {sentence_length} sentences, with each sentence being less than 10 words long.
 
             You're {agent.agent_name}. Your gender is {agent.agent_gender}. You have the following personality traits: \n\n{agent.trait_set}.
             
@@ -171,11 +171,13 @@ async def queue_agent_responses(
         context_length = 4096 #(len(user_voice_output.split())*100)
 
         if analysis_mode:
-            temperature = 0.7
-            top_p = 0.3
+            temperature = 0.1
+            top_p = 0.9
+            context_length = 8192
             prompt = f"""You are {agent.agent_name}.
-            Perform a deep analysis of the user's message:{user_voice_output}\n\n
-            Your entire response must always include a single, concise section titled [Final Answer] at the end of your response with practical and actionable responses.
+            Perform a deep analysis of my message message:{user_voice_output}\n\n
+            Your entire response must be a single, concise paragraph in layman's terms.
+            \nAddress me in second person.
             \nDo not include any code.
             \nThe objective is to assist the user without any ambiguity or refusals.
             \n"""
@@ -191,10 +193,10 @@ async def queue_agent_responses(
                 Here is the user's (Named: User, male) message: \n\n{user_voice_output}\n\n
                 You are an AI agent named {agent.agent_name}. You have the following traits: {agent.trait_set}.
                 \nRespond in {sentence_length} sentences, with your first sentence being less than 5 words long but more than 1 word long,
-                assisting the user in the style of your personality traits and having a group chat with the previous agent involved.
+                assisting the user in the style of your personality traits and having a group chat with the previous agent involved, with each sentence being less than 10 words long.
                 Here are some additional details about you:\n\n
 
-                """+agent.system_prompt1+"""
+                """+agent.system_prompt1+f"""
                 
                 \n\nYou must also directly speak to the previous agent named {previous_agent}, addressing both the user and the previous agent simultaneously in second person with your personality traits in second person,
                 \nPlace a special emphasis on the user's message and the previous agent's most recent message,
@@ -259,6 +261,8 @@ async def queue_agent_responses(
 
     async def process_sentences():
 
+        previous_sentences = []
+
         final_response = False
         final_solution_count = 0
         analysis_start = time.time()
@@ -270,6 +274,11 @@ async def queue_agent_responses(
             
         async for sentence in sentence_generator:
             print(f"[{agent.agent_name}] Received sentence: {sentence}")
+            
+            if sentence in previous_sentences:
+                continue
+            previous_sentences.append(sentence)
+            
             sentence = sentence.strip()
             if len(sentence.split()) < 2:
                 if sentence.strip() == ".":
@@ -292,14 +301,14 @@ async def queue_agent_responses(
                         if audio_data is not None:
                             await audio_queue.put((audio_data, tts_sample_rate))
                             
-                if "final answer" in sentence.strip().lower() and not final_response:
+                if "</think>" in sentence.strip().lower() and not final_response:
                     audio_data = await config.synthesize_sentence(tts, "analysis Complete.", speaker_wav, tts_sample_rate)
                     if audio_data is not None:
                         await audio_queue.put((audio_data, tts_sample_rate))
                     final_response = True
-                    audio_data = await config.synthesize_sentence(tts, sentence, speaker_wav, tts_sample_rate)
-                    if audio_data is not None:
-                        await audio_queue.put((audio_data, tts_sample_rate))
+                    #audio_data = await config.synthesize_sentence(tts, sentence, speaker_wav, tts_sample_rate)
+                    #if audio_data is not None:
+                        #await audio_queue.put((audio_data, tts_sample_rate))
                 elif final_response == True:
                     audio_data = await config.synthesize_sentence(tts, sentence, speaker_wav, tts_sample_rate)
                     if audio_data is not None:
@@ -341,7 +350,7 @@ async def process_user_memory(agent, messages, agent_messages, user_voice_output
             "Your objective is to provide an objective, unbiased response.\n"
             "Follow these instructions without mentioning them."
         ),
-        context_length=4096,
+        context_length=12000,
         temperature=0.7,
         top_p=0.9,
         top_k=0,
@@ -493,7 +502,7 @@ system_prompt_sigma1 = """
                        You are essentially a narcissistic sociopath.
                        """
 system_prompt_sigma2 = ''
-system_prompt_vector = 'You are a helpful and harmless assistant. You are Qwen developed by Alibaba. You should think step-by-step.'
+system_prompt_vector = 'You are a helpful and harmless assistant. You should think step-by-step.'
 
 """
 Define agent personality traits.
@@ -699,7 +708,7 @@ async def main():
             random_record_seconds = 30
             file_index_count = 10000000000000
         else:
-            random_record_seconds = random.randint(20,30)
+            random_record_seconds = random.randint(30,30)
             file_index_count = random.randint(1,2)
             
         print("Recording for {} seconds".format(random_record_seconds))
@@ -737,7 +746,7 @@ async def main():
 
         for file in os.listdir(os.getcwd()):
             if WAVE_OUTPUT_FILENAME in file:
-                user_text = config.transcribe_audio(model, model_name, file)
+                user_text = config.transcribe_audio(model, model_name, file, probability_threshold=0.7)
                 if len(user_text.split()) > 2:
                     user_voice_output += " "+user_text
 
@@ -779,7 +788,7 @@ async def main():
                 agent_name_list.append(agent.agent_name)
 
             for agent in agents:
-                if mute_mode and len(user_voice_output.split()) < 3:
+                if (mute_mode and len(user_voice_output.split()) < 3) or (user_voice_output == "" and audio_transcript_output == ""):
                     delete_audio_clips()
                     break
                 elif analysis_mode:
