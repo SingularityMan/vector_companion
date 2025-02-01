@@ -152,8 +152,8 @@ async def queue_agent_responses(
         context_length = 4096
 
         messages, agent_messages, sentence_generator = await agent.generate_text_stream(
-            messages[-10:],
-            agent_messages[-10:],
+            messages[-5:],
+            agent_messages[-5:],
             contextual_information,
             prompt,
             context_length=context_length,
@@ -241,7 +241,7 @@ async def queue_agent_responses(
             previous_agent_gender = agent.agent_gender    
 
         messages, agent_messages, sentence_generator = await agent.generate_text_stream(
-            messages[-10:],
+            messages[-5:],
             agent_messages[-10:],
             contextual_information,
             prompt,
@@ -615,9 +615,9 @@ vectorAgent = config.VectorAgent(language_model)
 
 # List of agents
 agents = [
-    axiom,
+    #axiom,
     axis,
-    #fractal,
+    fractal,
     #sigma,
     vector
     ]
@@ -691,6 +691,7 @@ async def main():
     global analysis_model
     global mute_mode
     user_memory_task = None
+    listen_for_audio = False
         
     while True:
 
@@ -708,8 +709,12 @@ async def main():
             random_record_seconds = 30
             file_index_count = 10000000000000
         else:
-            random_record_seconds = random.randint(30,30)
-            file_index_count = random.randint(1,2)
+            if listen_for_audio:
+                random_record_seconds = random.randint(30,30)
+                file_index_count = random.randint(2,2)
+            else:
+                random_record_seconds = 5
+                file_index_count = 1
             
         print("Recording for {} seconds".format(random_record_seconds))
         record_audio_dialogue = threading.Thread(target=config.record_audio_output, args=(audio, AUDIO_TRANSCRIPT_FILENAME, FORMAT, CHANNELS, RATE, 1024, random_record_seconds, file_index_count, can_speak_event, model, model_name))
@@ -784,6 +789,17 @@ async def main():
 
             random.shuffle(agents)
 
+            if user_voice_output.strip() == "" and audio_transcript_output.strip() != "":
+                if not listen_for_audio:
+                    delete_audio_clips()
+                    print("[AUDIO PRESENT. RESETTING LISTENER.]")
+                    listen_for_audio = True
+                else:
+                    listen_for_audio = False
+                    print("[AUDIO RECORDING FINISHED. GENERATING AGENT RESPONSES.]")
+            else:
+                listen_for_audio = False
+
             for agent in agents:
                 agent_name_list.append(agent.agent_name)
 
@@ -797,12 +813,12 @@ async def main():
                 elif not analysis_mode:
                     if agent.language_model != language_model:
                         continue
-                    
+                            
                 for agent_name in agent_name_list:
                     if agent_name.lower() in user_voice_output.lower():
                         agents_mentioned.append(agent_name)
 
-                if (agent.agent_name.lower() in agents_mentioned or agents_mentioned == []): 
+                if (agent.agent_name.lower() in agents_mentioned or agents_mentioned == []) and not listen_for_audio: 
                     
                     await queue_agent_responses(
                         agent,

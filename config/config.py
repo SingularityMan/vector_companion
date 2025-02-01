@@ -522,7 +522,7 @@ def view_image(vision_model: Any, processor: Any):
             with open("axiom_screenshot.png", "rb") as image_file:
                 encoded_image = base64.b64encode(image_file.read()).decode("utf-8")
 
-            prompt = "Describe the image you see in detail." 
+            prompt = "Provide as concise a summary as possible of what you see on the screen." 
 
             # Generate the response
             result = ollama.generate(
@@ -535,7 +535,7 @@ def view_image(vision_model: Any, processor: Any):
                     "temperature": 0.7,
                     "top_p": 0.9,
                     "num_ctx": 512,
-                    "batch_size": 512
+                    "num_predict": 500
                     }
                 )
             
@@ -545,9 +545,10 @@ def view_image(vision_model: Any, processor: Any):
             with open("screenshot_description.txt", "a", encoding='utf-8') as f:
                     f.write(f"\n\nScreenshot Contents at {current_time.strftime('%H:%M:%S')}: \n\n"+text_response)
 
-            image_lock = False
 
-            time.sleep(5)
+            time.sleep(10)
+            
+            image_lock = False
             
         except Exception as e:
             image_lock = False
@@ -834,7 +835,7 @@ def record_audio_output(
             if "audio_transcript_output" in file:
                 file_path = os.path.join(os.getcwd(), file)
                 if os.path.isfile(file_path):
-                    audio_transcript_output = transcribe_audio(model, model_name, file_path)
+                    audio_transcript_output = transcribe_audio(model, model_name, file_path, probability_threshold=0.5)
                     if len(audio_transcript_output.strip().split()) <= 6:
                         audio_transcript_output = ""
                     audio_transcriptions += " "+audio_transcript_output
