@@ -273,6 +273,7 @@ async def queue_agent_responses(
                 await audio_queue.put((audio_data, tts_sample_rate))
             
         async for sentence in sentence_generator:
+            
             print(f"[{agent.agent_name}] Received sentence: {sentence}")
             
             if sentence in previous_sentences:
@@ -658,7 +659,7 @@ async def main():
             file_index_count = 10000000000000
         else:
             if listen_for_audio:
-                random_record_seconds = random.randint(3,3)
+                random_record_seconds = random.randint(4,4)
                 file_index_count = 1
             else:
                 with open('screenshot_description.txt', 'w', encoding='utf-8') as f:
@@ -701,6 +702,7 @@ async def main():
         for file in os.listdir(os.getcwd()):
             if WAVE_OUTPUT_FILENAME in file:
                 user_text = config.transcribe_audio(model, model_name, file, probability_threshold=0.7)
+                user_voice_output += " "+user_text
 
         print("[USER VOICE OUTPUT]", user_voice_output)
 

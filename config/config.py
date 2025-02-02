@@ -696,7 +696,7 @@ def record_audio_output(
 
         frames = []
 
-def transcribe_audio(model: Any, model_name, WAVE_OUTPUT_FILENAME: str, RATE: int = 16000, probability_threshold=0.2) -> str:
+def transcribe_audio(model: Any, model_name, WAVE_OUTPUT_FILENAME: str, RATE: int = 16000, probability_threshold=0.3) -> str:
 
     """
     Transcribes audio via whisper
