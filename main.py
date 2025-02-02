@@ -58,7 +58,7 @@ tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True).to
 tts.synthesizer.use_cuda = True
 tts.synthesizer.fp16 = True
 tts.synthesizer.stream = True
-language_model = "gemma2:2b-instruct-q8_0" # Used for general chatting.
+language_model = "gemma2:27b-instruct-q8_0" # Used for general chatting.
 analysis_model = "deepseek-r1:14b-qwen-distill-q8_0" # REPLACE WITH WHATEVER MODEL YOU'D LIKE. CANNOT BE THE SAME MODEL AS language_model.
 analysis_mode = False
 mute_mode = False
@@ -152,8 +152,8 @@ async def queue_agent_responses(
         context_length = 4096
 
         messages, agent_messages, sentence_generator = await agent.generate_text_stream(
-            messages[-5:],
-            agent_messages[-5:],
+            messages[-3:],
+            agent_messages[-3:],
             contextual_information,
             prompt,
             context_length=context_length,
@@ -241,8 +241,8 @@ async def queue_agent_responses(
             previous_agent_gender = agent.agent_gender    
 
         messages, agent_messages, sentence_generator = await agent.generate_text_stream(
-            messages[-5:],
-            agent_messages[-10:],
+            messages[-3:],
+            agent_messages[-3:],
             contextual_information,
             prompt,
             context_length=context_length,
@@ -438,39 +438,6 @@ def delete_audio_clips():
     for audio_clip in os.listdir(os.getcwd()):
         if "audio_transcript_output" in audio_clip:
             os.remove(os.path.join(os.getcwd(), audio_clip))
-
-def preload_language_model(language_model):
-    async def preload():
-        print("Preloading language model...")
-        dummy_messages = [{'role': 'user', 'content': 'Hello'}]
-
-        def run_chat():
-            return ollama.chat(
-                model=language_model,
-                messages=dummy_messages,
-                stream=True,
-                options={
-                    "repeat_penalty": 1.15,
-                    "temperature": 0.5,
-                    "top_p": 0.5,
-                    "top_k": 0,
-                    "num_ctx": 4096,
-                    "seed": random.randint(0, 2147483647)
-                }
-            )
-
-        loop = config.asyncio.get_event_loop()
-        stream = await loop.run_in_executor(None, run_chat)
-        for chunk in stream:
-            pass  # Consume the stream to trigger loading
-        print("Language model preloaded.")
-
-    config.asyncio.run(preload())
-
-def preload_tts_model(tts, speaker_wav):
-    print("Preloading TTS model...")
-    tts.tts(text="Initializing.", speaker_wav=speaker_wav, language="en")
-    print("TTS model preloaded.")
                 
 # Setup channel info
 FORMAT = pyaudio.paInt16  # data type format
@@ -547,11 +514,6 @@ agents_personality_traits = {
     ]
 }
 
-# Deprecated
-temperature = 0.3
-top_p = 0.3
-top_k=2000
-
 sentence_length = 2 # Truncates the message to 2 sentences per response
 message_length = 45 # Deprecated
 
@@ -599,9 +561,6 @@ agent_config = [
     }
 ]
 
-# Build the agents
-dialogue_dir_axiom = r"dialogue_text_axiom.txt" # deprecated
-dialogue_dir_axis = r"dialogue_text_axis.txt" # deprecated
 
 # Chat Agents
 axiom = config.Agent("axiom", "Male, heterosexual", agents_personality_traits['axiom'], system_prompt_axiom1, system_prompt_axiom2, agent_config[0]['dialogue_list'], language_model, agent_config[0]['speaker_wav'], agent_config[0]["extraversion"])
@@ -615,9 +574,9 @@ vectorAgent = config.VectorAgent(language_model)
 
 # List of agents
 agents = [
-    #axiom,
+    axiom,
     axis,
-    fractal,
+    #fractal,
     #sigma,
     vector
     ]
@@ -647,12 +606,6 @@ if os.path.exists("user_memory.json"):
 else:
     user_memory = [""]
 
-message_dump = [
-                    {"axiom": []},
-                    {"axis": []},
-                    {"vector bot": []}
-               ]
-
 # Prepare voice output directories by deleting any existing files.
 for agent in agent_config:
     output_dir = agent["output_dir"]
@@ -668,8 +621,6 @@ threading.Thread(target=voice_output_async).start()
 sentences = []
 can_speak = True
 can_speak_event.set()
-preload_tts_model(tts, agent_config[0]['speaker_wav'])
-#preload_language_model(language_model)
     
 #---------------------MAIN LOOP----------------------#
 
@@ -692,28 +643,29 @@ async def main():
     global mute_mode
     user_memory_task = None
     listen_for_audio = False
+    audio_transcript_output = ""
+    audio_transcript_list = []
         
     while True:
 
-        delete_audio_clips()
+        #delete_audio_clips()
 
         if not can_speak_event_asyncio.is_set():
             print("Waiting for response to complete...")
             await config.asyncio.sleep(0.05)
             continue
 
-        with open('screenshot_description.txt', 'w', encoding='utf-8') as f:
-            f.write("")
-
         if analysis_mode or mute_mode:
             random_record_seconds = 30
             file_index_count = 10000000000000
         else:
             if listen_for_audio:
-                random_record_seconds = random.randint(30,30)
-                file_index_count = random.randint(2,2)
+                random_record_seconds = random.randint(3,3)
+                file_index_count = 1 #random.randint(2,2)
             else:
-                random_record_seconds = 5
+                with open('screenshot_description.txt', 'w', encoding='utf-8') as f:
+                    f.write("")
+                random_record_seconds = 2
                 file_index_count = 1
             
         print("Recording for {} seconds".format(random_record_seconds))
@@ -740,12 +692,15 @@ async def main():
         with open("screenshot_description.txt", 'r', encoding='utf-8') as f:
             screenshot_description = f.read()
 
-        audio_transcript_output = config.audio_transcriptions
-
-        print("[AUDIO TRANSCRIPTIONS]:", audio_transcript_output)
+        if config.audio_transcriptions.strip() != "":
+            audio_transcript_list.append(config.audio_transcriptions)
+        audio_transcript_output = config.audio_transcriptions.strip()
         
-        if len(audio_transcript_output.strip().split()) <= 6:
-            audio_transcript_output = ""
+        print("[AUDIO TRANSCRIPTIONS]:", audio_transcript_output)
+        print("[AUDIO TRANSCRIPTIONS LIST]:", audio_transcript_list)
+        
+        #if len(audio_transcript_output.strip().split()) <= 3:
+            #audio_transcript_output = ""
 
         user_voice_output = ""
 
@@ -795,8 +750,9 @@ async def main():
                     print("[AUDIO PRESENT. RESETTING LISTENER.]")
                     listen_for_audio = True
                 else:
-                    listen_for_audio = False
-                    print("[AUDIO RECORDING FINISHED. GENERATING AGENT RESPONSES.]")
+                    pass
+                    #listen_for_audio = False
+                    #print("[AUDIO RECORDING FINISHED. GENERATING AGENT RESPONSES.]")
             else:
                 listen_for_audio = False
 
@@ -804,7 +760,7 @@ async def main():
                 agent_name_list.append(agent.agent_name)
 
             for agent in agents:
-                if (mute_mode and len(user_voice_output.split()) < 3) or (user_voice_output == "" and audio_transcript_output == ""):
+                if (mute_mode and len(user_voice_output.split()) < 3) or (user_voice_output.strip() == "" and audio_transcript_list == []):
                     delete_audio_clips()
                     break
                 elif analysis_mode:
@@ -824,9 +780,13 @@ async def main():
                         agent,
                         user_voice_output,
                         screenshot_description,
-                        audio_transcript_output,
+                        " ".join(audio_transcript_list),
                         vector_text
                     )
+
+            if not listen_for_audio:
+                audio_transcript_output = ""
+                audio_transcript_list = []
                 
             with open('conversation_history.json', 'w') as f:
                 json.dump(messages, f)
