@@ -746,9 +746,7 @@ def transcribe_audio(model: Any, model_name, WAVE_OUTPUT_FILENAME: str, RATE: in
     user_voice_output_raw = result.text
     user_voice_output = find_repeated_words(user_voice_output_raw)
     user_voice_output = remove_repetitive_phrases(user_voice_output)
-    if "audio_transcript_output" in WAVE_OUTPUT_FILENAME:
-        if len(user_voice_output.strip().split()) < 6:
-            user_voice_output = ""
+    
     try:
         os.remove(WAVE_OUTPUT_FILENAME)
     except Exception as e:

@@ -648,8 +648,6 @@ async def main():
         
     while True:
 
-        #delete_audio_clips()
-
         if not can_speak_event_asyncio.is_set():
             print("Waiting for response to complete...")
             await config.asyncio.sleep(0.05)
@@ -661,7 +659,7 @@ async def main():
         else:
             if listen_for_audio:
                 random_record_seconds = random.randint(3,3)
-                file_index_count = 1 #random.randint(2,2)
+                file_index_count = 1
             else:
                 with open('screenshot_description.txt', 'w', encoding='utf-8') as f:
                     f.write("")
@@ -679,7 +677,6 @@ async def main():
             RATE,
             CHANNELS,
             CHUNK,
-            #RECORD_SECONDS*file_index_count,
             random_record_seconds*file_index_count,
             THRESHOLD,
             SILENCE_LIMIT,
@@ -696,30 +693,16 @@ async def main():
             audio_transcript_list.append(config.audio_transcriptions)
         audio_transcript_output = config.audio_transcriptions.strip()
         
-        print("[AUDIO TRANSCRIPTIONS]:", audio_transcript_output)
+        print("[AUDIO TRANSCRIPTION]:", audio_transcript_output)
         print("[AUDIO TRANSCRIPTIONS LIST]:", audio_transcript_list)
-        
-        #if len(audio_transcript_output.strip().split()) <= 3:
-            #audio_transcript_output = ""
 
         user_voice_output = ""
 
         for file in os.listdir(os.getcwd()):
             if WAVE_OUTPUT_FILENAME in file:
                 user_text = config.transcribe_audio(model, model_name, file, probability_threshold=0.7)
-                if len(user_text.split()) > 2:
-                    user_voice_output += " "+user_text
 
         print("[USER VOICE OUTPUT]", user_voice_output)
-                    
-
-        """if os.path.exists(WAVE_OUTPUT_FILENAME):
-            user_voice_output = config.transcribe_audio(model, model_name, WAVE_OUTPUT_FILENAME)
-            if len(user_voice_output.split()) < 3:
-                user_voice_output = ""
-        else:
-            print("No user voice output transcribed")
-            user_voice_output = """""
 
         vector_text = ""
         vector_text = "Here is the screenshot description: "+screenshot_description
@@ -751,8 +734,6 @@ async def main():
                     listen_for_audio = True
                 else:
                     pass
-                    #listen_for_audio = False
-                    #print("[AUDIO RECORDING FINISHED. GENERATING AGENT RESPONSES.]")
             else:
                 listen_for_audio = False
 
@@ -785,6 +766,7 @@ async def main():
                     )
 
             if not listen_for_audio:
+                screenshot_description = ""
                 audio_transcript_output = ""
                 audio_transcript_list = []
                 
