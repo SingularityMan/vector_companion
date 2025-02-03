@@ -52,7 +52,7 @@ recording_complete_event = threading.Event()
 #vision_model = AutoModelForCausalLM.from_pretrained(vision_path, trust_remote_code=True)
 #processor = AutoProcessor.from_pretrained(vision_path, trust_remote_code=True)
 #vision_model.to('cuda:1')
-model_name = "base" # Replace this with whichever whisper model you'd like.
+model_name = "turbo" # Replace this with whichever whisper model you'd like.
 model = whisper.load_model(model_name, device='cuda:0')
 tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True).to('cuda:0')
 tts.synthesizer.use_cuda = True
@@ -123,16 +123,17 @@ async def queue_agent_responses(
         prompt = (
             f"""Here is a description of the images/OCR: \n\n{screenshot_description}\n\n
             Here is a transcript of the audio output if it is present (Do not respond directly to this. This is for contextual purposes only):\n\n{audio_transcript_output}\n\n
-            \nRespond in {sentence_length} sentences, with each sentence being less than 10 words long.
+            \nYou must strictly respond in {sentence_length} sentences, with each sentence being concise.
 
             You're {agent.agent_name}. Your gender is {agent.agent_gender}. You have the following personality traits: \n\n{agent.trait_set}.
             
-            \nAct like you're inside the situation directly responding to all the other agents by name:\n\n{', '.join(agents_list)}\n\n.
+            \nAct like you're inside the situation directly responding to all the other agents by name except the user:\n\n{', '.join(agents_list)}\n\n.
             \nYou need to respond to the agents directly regarding the current situation described by the contextual information provided (images, audio transcript)
             and evolving dynamic with the agents simultaneously in the style of your personality traits without acknowledging these instructions.
 
             \n\n"""+agent.system_prompt1+"""\n
 
+            \nAgain, you must follow all these 
             \nAvoid breaking immersion.
             \nDo not mention the user.
             \nKeep the topic on the most recent images/audio transcript but don't mention them directly, just include them as part of the context.
@@ -152,8 +153,8 @@ async def queue_agent_responses(
         context_length = 4096
 
         messages, agent_messages, sentence_generator = await agent.generate_text_stream(
-            messages[-3:],
-            agent_messages[-3:],
+            messages[-5:],
+            agent_messages[-5:],
             contextual_information,
             prompt,
             context_length=context_length,
@@ -241,8 +242,8 @@ async def queue_agent_responses(
             previous_agent_gender = agent.agent_gender    
 
         messages, agent_messages, sentence_generator = await agent.generate_text_stream(
-            messages[-3:],
-            agent_messages[-3:],
+            messages[-5:],
+            agent_messages[-5:],
             contextual_information,
             prompt,
             context_length=context_length,
@@ -659,12 +660,12 @@ async def main():
             file_index_count = 10000000000000
         else:
             if listen_for_audio:
-                random_record_seconds = random.randint(4,4)
+                random_record_seconds = random.randint(7,7)
                 file_index_count = 1
             else:
                 with open('screenshot_description.txt', 'w', encoding='utf-8') as f:
                     f.write("")
-                random_record_seconds = 2
+                random_record_seconds = 3
                 file_index_count = 1
             
         print("Recording for {} seconds".format(random_record_seconds))
@@ -702,7 +703,8 @@ async def main():
         for file in os.listdir(os.getcwd()):
             if WAVE_OUTPUT_FILENAME in file:
                 user_text = config.transcribe_audio(model, model_name, file, probability_threshold=0.7)
-                user_voice_output += " "+user_text
+                if len(user_text.split()) > 2:
+                    user_voice_output += " "+user_text
 
         print("[USER VOICE OUTPUT]", user_voice_output)
 

@@ -434,7 +434,7 @@ def view_image(vision_model: Any, processor: Any):
                     f.write(f"\n\nScreenshot Contents at {current_time.strftime('%H:%M:%S')}: \n\n"+text_response)
 
 
-            time.sleep(10)
+            time.sleep(1)
             
             image_lock = False
             
@@ -696,7 +696,7 @@ def record_audio_output(
 
         frames = []
 
-def transcribe_audio(model: Any, model_name, WAVE_OUTPUT_FILENAME: str, RATE: int = 16000, probability_threshold=0.3) -> str:
+def transcribe_audio(model: Any, model_name, WAVE_OUTPUT_FILENAME: str, RATE: int = 16000, probability_threshold=0.5) -> str:
 
     """
     Transcribes audio via whisper
@@ -729,7 +729,7 @@ def transcribe_audio(model: Any, model_name, WAVE_OUTPUT_FILENAME: str, RATE: in
         return ""
 
     options = whisper.DecodingOptions(
-    task="translate",
+    task="transcribe",
     language="en",
     prompt=None,
     prefix=None,
