@@ -468,6 +468,19 @@ def record_audio(
     try:
         while True:
 
+            # Create a PyAudio instance
+            p = pyaudio.PyAudio()
+
+            # Find the device index of the VB-Cable adapter
+            device_index = None
+            for i in range(p.get_device_count()):
+                device_info = p.get_device_info_by_index(i)
+                #print(device_info)
+                if 'Microphone' in device_info['name']:  # Look for 'VB-Audio' instead of 'VB-Cable'
+                    print("[FOUND MICROPHONE. DEVICE INDEX SET TO]", i)
+                    device_index = i
+                    break
+
             # Cancel recording if Agent speaking
             if not can_speak_event.is_set():
                 time.sleep(0.05)
@@ -479,7 +492,7 @@ def record_audio(
                                 channels=CHANNELS,
                                 rate=RATE,
                                 input=True,
-                                input_device_index=3,
+                                input_device_index=device_index,
                                 frames_per_buffer=CHUNK
                                 )
             frames = []
@@ -554,7 +567,7 @@ def record_audio(
                                 channels=CHANNELS,
                                 rate=RATE,
                                 input=True,
-                                input_device_index=3,
+                                input_device_index=device_index,
                                 frames_per_buffer=CHUNK
                                 )
                             recording_index += 1
@@ -624,7 +637,7 @@ def record_audio_output(
         for i in range(p.get_device_count()):
             device_info = p.get_device_info_by_index(i)
             #print(device_info)
-            if 'CABLE Output (VB-Audio Virtual' in device_info['name']:  # Look for 'VB-Audio' instead of 'VB-Cable'
+            if 'CABLE Output' in device_info['name']:  # Look for 'VB-Audio' instead of 'VB-Cable'
                 device_index = i
                 break
 
@@ -690,6 +703,8 @@ def record_audio_output(
 
         if file_index >= file_index_count:
             can_speak_event.clear()
+
+        time.sleep(0.05)
             
         if not can_speak_event.is_set():
             break
