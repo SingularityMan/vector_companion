@@ -335,6 +335,12 @@ def delete_audio_clips():
 # Torch stuff
 torch.backends.cudnn.benchmark = False
 torch.backends.cudnn.deterministic = True
+if torch.cuda.is_available():
+    device = 'cuda'
+elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+    device = 'mps'
+else:
+    device = 'cpu'
 
 # Asyincio Event settings
 can_speak_event_asyncio = asyncio.Event()
@@ -343,10 +349,15 @@ audio_playback_lock = asyncio.Lock()
 
 # Vision, Audio, Speech and Text Generation Models
 audio_model_name = config.audio_model_name 
-audio_model = whisper.load_model(audio_model_name, device='cuda')
-tts = TTS(config.tts_model, progress_bar=True).to('cuda')
-tts.synthesizer.use_cuda = config.tts_synthesizer_use_cuda
-tts.synthesizer.fp16 = config.tts_synthesizer_fp16
+audio_model = whisper.load_model(audio_model_name, device=device)
+tts = TTS(config.tts_model, progress_bar=True).to(device)
+if device == 'cuda':
+    tts.synthesizer.use_cuda = config.tts_synthesizer_use_cuda
+    tts.synthesizer.fp16 = config.tts_synthesizer_fp16
+else:
+    # Either disable these optimizations or set them appropriately for CPU/MPS.
+    tts.synthesizer.use_cuda = False
+    tts.synthesizer.fp16 = False
 tts.synthesizer.stream = config.tts_synthesizer_stream
 language_model = config.language_model 
 language_context_length = config.language_context_length
