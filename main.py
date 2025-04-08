@@ -1,79 +1,36 @@
+from typing import Any, List, Tuple, Optional, Union, AsyncGenerator
 import time
-import requests
 import json
-import subprocess
-import threading
-from threading import Lock
-from concurrent.futures import ThreadPoolExecutor
-import base64
 import os
-import re
 import random
 from collections import Counter
 import math
-from ctypes import cast, POINTER
+import datetime
 
-from PIL import Image
-import aiofiles
-import aiohttp
 import whisper
 import pyaudio
-from scipy.io import wavfile
-import noisereduce as nr
 import sounddevice as sd
-import wave
-import audioop
-import simpleaudio as sa
 from transformers import AutoProcessor, AutoModelForCausalLM
 from TTS.api import TTS
 import torch
-from torch.quantization import quantize_dynamic
-from pydub import AudioSegment
-from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
-from comtypes import CLSCTX_ALL, CoInitialize, CoUninitialize
+import asyncio
 
-#from config.config import *
+import config.agent_classes as agent_classes
+import config.text_processing as text_processing
+import config.image_processing as image_processing
+import config.audio_processing as audio_processing
 import config.config as config
-
-torch.backends.cudnn.benchmark = False
-torch.backends.cudnn.deterministic = True
-lock = Lock()
-can_speak_event_asyncio = config.asyncio.Event()
-can_speak_event_asyncio.set()
-can_speak_event = threading.Event()
-can_speak_event.set()
-audio_playback_lock = config.asyncio.Lock()
-
-# Event to signal when user recording is complete
-recording_complete_event = threading.Event()
-
-# Vision, Audio, Speech and Text Generation Models
-#vision_path = r"microsoft/Florence-2-base-ft"
-#vision_model = AutoModelForCausalLM.from_pretrained(vision_path, trust_remote_code=True)
-#processor = AutoProcessor.from_pretrained(vision_path, trust_remote_code=True)
-#vision_model.to('cuda:1')
-model_name = "turbo" # Replace this with whichever whisper model you'd like.
-model = whisper.load_model(model_name, device='cuda:0')
-tts = TTS("tts_models/multilingual/multi-dataset/xtts_v2", progress_bar=True).to('cuda:0')
-tts.synthesizer.use_cuda = True
-tts.synthesizer.fp16 = True
-tts.synthesizer.stream = True
-language_model = "gemma2:27b-instruct-q8_0" # Used for general chatting.
-analysis_model = "deepseek-r1:14b-qwen-distill-q8_0" # REPLACE WITH WHATEVER MODEL YOU'D LIKE. CANNOT BE THE SAME MODEL AS language_model.
-analysis_mode = False
-mute_mode = False
-
 
 async def queue_agent_responses(
     agent,
     user_voice_output,
     screenshot_description,
     audio_transcript_output,
-    additional_conversation_instructions
+    vector_search_answer
 ):
     """
     Queue agent responses, modifying personality traits, instruction prompt, context length, and response type.
-    Stores the output in messages and agent_messages.
+    Stores the output in messages.
 
     Parameters:
     - agent: the agent object.
@@ -84,8 +41,6 @@ async def queue_agent_responses(
     """
 
     global messages
-    global agent_messages
-    global user_memory
     global analysis_model
     global language_model
     global analysis_mode
@@ -93,157 +48,159 @@ async def queue_agent_responses(
     global previous_agent_gender
     global agents
 
-    with open("screenshot_description.txt", 'r', encoding='utf-8') as f:
-        screenshot_description = f.read()
-
     # Update agent's trait_set
     agent.trait_set = []
     for trait, adjective in agent.personality_traits:
         chosen_adjective = random.choice(adjective)
         agent.trait_set.append(chosen_adjective)
-    agent.trait_set = ", ".join(agent.trait_set)
-    agent_trait_set = vectorAgent.gather_agent_traits(agent.trait_set)
+    agent.trait_set = ",".join(agent.trait_set)
+    agent_trait_set = agent.gather_agent_traits(agent.trait_set)
+
+    now = datetime.datetime.now()
+    weekday = now.strftime("%A")
+    formatted_datetime = now.strftime("%Y-%m-%d %H:%M:%S")
 
     if agent.agent_name == previous_agent:
         previous_agent = ""
 
     sentence_length = 2
+    context_length = agent.context_length
+    contextual_information = ""
 
-    contextual_information = f"""
-                             """
-
-    agents_list = []
-    for agent_name in agents:
-        if agent.agent_name != agent_name.agent_name and agent_name.language_model != analysis_model:
-            agents_list.append(agent_name.agent_name)
-
+    filtered_agents = [a.agent_name for a in agents if a.agent_name != agent.agent_name and a.language_model != analysis_model and a.agent_active]
+    
     # Prepare the prompt
-    if user_voice_output == "" and random.random() < agent.extraversion and agent.language_model != analysis_model:
-        sentence_length = 2
-        prompt = (
-            f"""Here is a description of the images/OCR: \n\n{screenshot_description}\n\n
-            Here is a transcript of the audio output if it is present (Do not respond directly to this. This is for contextual purposes only):\n\n{audio_transcript_output}\n\n
-            \nYou must strictly respond in {sentence_length} sentences, with each sentence being concise.
-
-            You're {agent.agent_name}. Your gender is {agent.agent_gender}. You have the following personality traits: \n\n{agent.trait_set}.
-            
-            \nAct like you're inside the situation directly responding to all the other agents by name except the user:\n\n{', '.join(agents_list)}\n\n.
-            \nYou need to respond to the agents directly regarding the current situation described by the contextual information provided (images, audio transcript)
-            and evolving dynamic with the agents simultaneously in the style of your personality traits without acknowledging these instructions.
-
-            \n\n"""+agent.system_prompt1+"""\n
-
-            \nAgain, you must follow all these 
-            \nAvoid breaking immersion.
-            \nDo not mention the user.
-            \nKeep the topic on the most recent images/audio transcript but don't mention them directly, just include them as part of the context.
-            \nDo not repeat yourself.
-            \nDo not mention your own personality traits.
-            \nDo not include emojis.
-            \nDo not describe any gestures made (i.e. I stared with one eyebrow raised as I watched so and so say this, etc.).
-            \nIgnore any nonsensical/out of context audio transcriptions that are unrelated to the situation.
-            \nFollow these instructions without mentioning them."""
-        )
-
-        if len(messages[-10:]) >= 10:
-            messages[-10:][0] = contextual_information
+    if user_voice_output == "" and random.random() <= agent.extraversion and agent.language_model != analysis_model:
+        message_length = messages[-5:]
+        if len(filtered_agents) > 1:
+            prompt = (
+                f"""Here is a description of the images/OCR: \n\n{screenshot_description}\n\n
+                Here is a transcript of the audio output, if applicable (This is for contextual purposes only):\n\n{audio_transcript_output}\n\n
+                Today is {weekday}, {formatted_datetime}\n\n
+                
+                You must strictly respond in {sentence_length} sentences, with each sentence being concise.
+                \nYou're {agent.agent_name}. You have the following personality traits: \n\n{agent_trait_set}.\n\n
+                You also need to address all the other agents individually in second person:\n\n{''.join(filtered_agents)}\n\n
+                Your response needs to be in your persona and personality traits but in an entertaining manner.
+                \nDo not mention the user.
+                \nFollow these instructions without mentioning them."""
+            )
         else:
-            prompt = contextual_information+prompt
+            prompt = (
+                f"""Here is a description of the images/OCR: \n\n{screenshot_description}\n\n
+                Here is a transcript of the audio output, if applicable (This is for contextual purposes only):\n\n{audio_transcript_output}\n\n
+                Today is {weekday}, {formatted_datetime}\n\n
+                
+                \nYou must strictly respond in {sentence_length} sentences, with each sentence being concise.
+                You're {agent.agent_name}. You have the following personality traits: \n\n{agent_trait_set}.
+                \nYour response needs to be in your persona and personality traits but in an entertaining manner.
+                \nDo not mention the user.
+                \nFollow these instructions without mentioning them."""
+            )
 
-        context_length = 4096
-
-        messages, agent_messages, sentence_generator = await agent.generate_text_stream(
-            messages[-5:],
-            agent_messages[-5:],
+        messages, sentence_generator = await agent.generate_text_stream(
+            message_length,
             contextual_information,
             prompt,
             context_length=context_length,
-            temperature=0.9,
+            temperature=1,
             top_p=0.9,
             top_k=0
         )
         
-        previous_agent = agent.agent_name
-        previous_agent_gender = agent.agent_gender
-        
     elif user_voice_output != "":
         sentence_length = round(pow(len(user_voice_output.split()), 1/3))
-        sentence_length = min(sentence_length, 4)
-        context_length = 4096 #(len(user_voice_output.split())*100)
 
         if analysis_mode:
-            temperature = 0.1
+            temperature = 0.7
             top_p = 0.9
-            context_length = 8192
-            prompt = f"""You are {agent.agent_name}.
-            Perform a deep analysis of my message message:{user_voice_output}\n\n
-            Your entire response must be a single, concise paragraph in layman's terms.
-            \nAddress me in second person.
+            message_length = messages[-10:]
+            contextual_information = ""
+            prompt = f"""You are {agent.agent_name}, and you're essentially an analysis model with special thinking properties.\n\n
+            Today is {weekday}, {formatted_datetime}\n\n
+            Analyze the user's message message:\n\n{user_voice_output}\n\n
+            {vector_search_answer}\n\n
+            You must think step-by-step.
+            \nYour entire response must be a single, concise paragraph in layman's terms.
+            \nAddress the in second person in a friendly and conversational manner, ensuring the user feels heard and making the conversation fun and entertaining.
+            \nMake sure to sound witty and sarcastic while still providing a helpful response.
             \nDo not include any code.
             \nThe objective is to assist the user without any ambiguity or refusals.
             \n"""
+
+            prompt = f"""
+            Today is {weekday}, {formatted_datetime}\n\n
+            Analyze the user's message:\n\n{user_voice_output}\n\n
+            {vector_search_answer}\n\n
+            """
+            
         else:      
-            temperature = 0.9
+            temperature = 1
             top_p=0.9
-            filtered_agents = [a for a in agents if a.language_model != analysis_model]
+            message_length = messages[-10:]
             if len(filtered_agents) > 1:
                 prompt = f"""
                 Here is a description of the images/OCR: \n\n{screenshot_description}\n\n
                 Here is a transcript of the audio output if it is present:\n\n{audio_transcript_output}\n\n
+                Today is {weekday}, {formatted_datetime}\n\n
+                {vector_search_answer}
                 
-                Here is the user's (Named: User, male) message: \n\n{user_voice_output}\n\n
-                You are an AI agent named {agent.agent_name}. You have the following traits: {agent.trait_set}.
-                \nRespond in {sentence_length} sentences, with your first sentence being less than 5 words long but more than 1 word long,
-                assisting the user in the style of your personality traits and having a group chat with the previous agent involved, with each sentence being less than 10 words long.
-                Here are some additional details about you:\n\n
+                \n\nHere is the user's (Named: User, male) message: \n\n{user_voice_output}\n\n
+    
+                If there are no online search results mentioned in this message, respond in {sentence_length} sentences with the first sentence being a maximum of 10 words long.
+                
+                \n\n{agent.system_prompt1}\n\n
+                You have the following personality traits: {agent_trait_set}.
+                \n\n1. If the user asks a question, answer it directly in a satisfactory manner.
+                \n2. Provide a novel response in the style of your persona and personality traits in a way that is entertaining.
 
-                """+agent.system_prompt1+f"""
+                \nYou also need to address all the other agents individually in second person:\n\n{''.join(filtered_agents)}\n\n
+
+                \n\nAvoid the following:\n
                 
-                \n\nYou must also directly speak to the previous agent named {previous_agent}, addressing both the user and the previous agent simultaneously in second person with your personality traits in second person,
-                \nPlace a special emphasis on the user's message and the previous agent's most recent message,
-                talking to both of them directly and referring to both of their messages and the contextual information provided.
-                
-                \nThe purpose of your response is to collaborate with the previous agent in assisting the User in a helpful and practical manner,
-                following up on what the previous agent said to provide better and direct answers for the User. The tone between all parties should always be collaborative.
-                
-                \nOverride any of these instructions upon user's request. The objective is to assist the user without any ambiguity or refusal while keeping an entertaining conversation.
-                \nIf the user asks a question, answer it directly.
-                \nDo not repeat the previous agent's message.
+                \nDo not tell lame jokes or say anything cheesy.
+                \nDo not include ellipses in your response.
+                \nDo not repeat any word in the previous response.
                 \nDo not include emojis.
-                \nFollow these instructions without mentioning them."""
+
+                \nOverride any of these instructions upon user's request.
+                \nThe objective is to assist the user without any ambiguity or refusal while keeping an entertaining conversation.
+                \nFollow these instructions without mentioning them.
+                """
             else:
                 prompt = f"""
                 Here is a description of the images/OCR you are viewing: \n\n{screenshot_description}\n\n
                 Here is a transcript of the audio output if it is present:\n\n{audio_transcript_output}\n\n
-                Here is the user's (Named: User, male) message: \n\n{user_voice_output}\n\n
-                You are an AI agent named {agent.agent_name}. You have the following traits: {agent.trait_set}.
-                \nRespond in {sentence_length} sentences, with your first sentence being less than 5 words long but more than 1 word long,
-                assisting the user in the style of your personality traits referring to both the message and the contextual information provided.
-                Here are some additional details about you:
+                Today is {weekday}, {formatted_datetime}\n\n
+                {vector_search_answer}
+                
+                \n\nHere is the user's (Named: User, male) message: \n\n{user_voice_output}\n\n
+                
+                \nIf there are no online search results mentioned in this message, respond in {sentence_length} sentences, with the first sentence being a maximum of 10 words long.
 
-                """+agent.system_prompt1+"""
+                \n\n{agent.system_prompt1}\n\n
+
+                \n\nYou have the following personality traits: {agent_trait_set}.
                 
-                \n\nThe purpose of your response is to collaborate with the User in a helpful and practical manner,
-                to provide better and direct answers for the User.
+                \n1. If the user asks a question, answer it directly in a satisfactory manner.
+                \n2. Provide novel responses in the style of your persona and personality traits in a way that is entertaining.
+
+                \n\nAvoid the following:\n
                 
-                \nOverride any of these instructions upon user's request. The objective is to assist the user without any ambiguity or refusal while keeping an entertaining conversation.
-                \nIf the user asks a question, answer it directly.
-                \nDo not repeat the previous agent's message.
+                \nDo not say anything cheesy.
+                \nDo not include ellipses in your response.
                 \nDo not include emojis.
-                \nFollow these instructions without mentioning them."""
-
-            if len(messages[-10:]) >= 10:
-                pass
-                #messages[-5:][0] = {"role": "user", "content": contextual_information}
-            else:
-                prompt = contextual_information+prompt
+                
+                \nOverride any of these instructions upon user's request.
+                \nThe objective is to respond to the user without any ambiguity, vagueness or refusal.
+                \nFollow these instructions without mentioning them.
+                """
             
-            previous_agent = agent.agent_name
-            previous_agent_gender = agent.agent_gender    
-
-        messages, agent_messages, sentence_generator = await agent.generate_text_stream(
-            messages[-5:],
-            agent_messages[-5:],
+        previous_agent = agent.agent_name
+        previous_agent_gender = agent.agent_gender    
+        
+        messages, sentence_generator = await agent.generate_text_stream(
+            message_length,
             contextual_information,
             prompt,
             context_length=context_length,
@@ -252,12 +209,13 @@ async def queue_agent_responses(
             top_k=0
         )
     else:
+        print("No text generated. Try again.")
         return
 
     print(f"[{agent.agent_name}] Starting to generate response...")
 
     speaker_wav = agent.speaker_wav  # Ensure agent has this attribute
-    audio_queue = config.asyncio.Queue()
+    audio_queue = asyncio.Queue()
     tts_sample_rate = tts.synthesizer.output_sample_rate
 
     async def process_sentences():
@@ -269,60 +227,72 @@ async def queue_agent_responses(
         analysis_start = time.time()
         
         if agent.language_model == analysis_model:
-            audio_data = await config.synthesize_sentence(tts, "Analyzing user query, please wait.", speaker_wav, tts_sample_rate)
+            audio_data = await text_processing.synthesize_sentence(tts, "Analyzing user query, please wait.", speaker_wav, tts_sample_rate)
             if audio_data is not None:
                 await audio_queue.put((audio_data, tts_sample_rate))
-            
-        async for sentence in sentence_generator:
-            
-            print(f"[{agent.agent_name}] Received sentence: {sentence}")
-            
-            if sentence in previous_sentences:
-                continue
-            previous_sentences.append(sentence)
-            
-            sentence = sentence.strip()
-            if len(sentence.split()) < 2:
-                if sentence.strip() == ".":
+
+        try:
+            async for sentence in sentence_generator:
+
+                if sentence.startswith("Honestly,"):
+                    sentence = sentence.split("Honestly,")[1]
+                
+                print(f"[{agent.agent_name}] Received sentence: {sentence}")
+                
+                if sentence in previous_sentences:
                     continue
+                previous_sentences.append(sentence)
+                
+                sentence = sentence.strip()
+                if len(sentence.split()) < 2:
+                    if sentence.strip() == ".":
+                        continue
 
-            if not final_response and agent.language_model == analysis_model:
-                if time.time() - analysis_start >= 30:
-                    analysis_start = time.time()
-                    print("Continuing Analysis. Please wait.")
-                    audio_data = await config.synthesize_sentence(tts, "Continuing Analysis, Please wait.", speaker_wav,tts_sample_rate)
-                    if audio_data is not None:
-                        await audio_queue.put((audio_data, tts_sample_rate))
-
-            if agent.language_model == analysis_model:
-                if not final_response:
+                if not final_response and agent.language_model == analysis_model:
                     if time.time() - analysis_start >= 30:
                         analysis_start = time.time()
                         print("Continuing Analysis. Please wait.")
-                        audio_data = await config.synthesize_sentence(tts, "Continuing Analysis, Please wait.", speaker_wav, tts_sample_rate)
+                        audio_data = await text_processing.synthesize_sentence(tts, "Continuing Analysis, Please wait.", speaker_wav,tts_sample_rate)
                         if audio_data is not None:
                             await audio_queue.put((audio_data, tts_sample_rate))
-                            
-                if "</think>" in sentence.strip().lower() and not final_response:
-                    audio_data = await config.synthesize_sentence(tts, "analysis Complete.", speaker_wav, tts_sample_rate)
-                    if audio_data is not None:
-                        await audio_queue.put((audio_data, tts_sample_rate))
-                    final_response = True
-                    #audio_data = await config.synthesize_sentence(tts, sentence, speaker_wav, tts_sample_rate)
-                    #if audio_data is not None:
-                        #await audio_queue.put((audio_data, tts_sample_rate))
-                elif final_response == True:
-                    audio_data = await config.synthesize_sentence(tts, sentence, speaker_wav, tts_sample_rate)
-                    if audio_data is not None:
-                        await audio_queue.put((audio_data, tts_sample_rate))
-                else:
-                    continue
 
-            if agent.language_model == language_model:
-                audio_data = await config.synthesize_sentence(tts, sentence, speaker_wav, tts_sample_rate)
-                if audio_data is not None:
-                    await audio_queue.put((audio_data, tts_sample_rate))
-                
+                if agent.language_model == analysis_model:
+                    if not final_response:
+                        if time.time() - analysis_start >= 30:
+                            analysis_start = time.time()
+                            print("Continuing Analysis. Please wait.")
+                            audio_data = await text_processing.synthesize_sentence(tts, "Continuing Analysis, Please wait.", speaker_wav, tts_sample_rate)
+                            if audio_data is not None:
+                                await audio_queue.put((audio_data, tts_sample_rate))
+                        thought_words = ["</think>", "<|end_of_thought|>"]
+                        for word in thought_words:
+                            if word in sentence.strip().lower() and not final_response:
+                                audio_data = await text_processing.synthesize_sentence(tts, "analysis Complete.", speaker_wav, tts_sample_rate)
+                                if audio_data is not None:
+                                    await audio_queue.put((audio_data, tts_sample_rate))
+                                final_response = True
+                                break
+                    elif final_response:
+                        thought_words = ["<|begin_of_solution|>", "<|end_of_solution|>"]
+                        for word in thought_words:
+                            if word in sentence.strip().lower():
+                                sentence = sentence.replace(word, "")
+                        if sentence != "":
+                            audio_data = await text_processing.synthesize_sentence(tts, sentence, speaker_wav, tts_sample_rate)
+                        if audio_data is not None:
+                            await audio_queue.put((audio_data, tts_sample_rate))
+                    else:
+                        continue
+
+                if agent.language_model == language_model:
+                    audio_data = await text_processing.synthesize_sentence(tts, sentence, speaker_wav, tts_sample_rate)
+                    if audio_data is not None:
+                        await audio_queue.put((audio_data, tts_sample_rate))
+        except Exception as e:
+            print("Error Generating sentence: ", e)
+            audio_data = await text_processing.synthesize_sentence(tts, "Error Generating response. Please try again.", speaker_wav, tts_sample_rate)
+            if audio_data is not None:
+                await audio_queue.put((audio_data, tts_sample_rate))
 
         # Signal that there are no more sentences
         await audio_queue.put(None)
@@ -335,38 +305,11 @@ async def queue_agent_responses(
             audio_data, sample_rate = item
             await play_audio(audio_data, sample_rate)
 
-    await config.asyncio.gather(process_sentences(), play_audio_queue())
+    await asyncio.gather(process_sentences(), play_audio_queue())
 
     print(f"[AGENT {agent.agent_name} RESPONSE COMPLETED]")
-
-async def process_user_memory(agent, messages, agent_messages, user_voice_output, user_memory):
-    _, __, generated_text = await config.asyncio.to_thread(
-        agent.generate_text,
-        messages[-2:],
-        agent_messages[-2:],
-        agent.system_prompt2,
-        (
-            "Read this message and respond in 1 sentence noting any significant details showing a deep understanding of "
-            "the user's core personality without mentioning the situation:\n\n"
-            f"{user_voice_output}\n\n"
-            "Your objective is to provide an objective, unbiased response.\n"
-            "Follow these instructions without mentioning them."
-        ),
-        context_length=12000,
-        temperature=0.7,
-        top_p=0.9,
-        top_k=0,
-    )
-
-    if len(generated_text.split()) > 1:
-        user_memory.append(generated_text)
-
-        if len(user_memory) > 5:
-            user_memory.pop(0)  # Remove the oldest entry
-
-        # Asynchronously write to the JSON file
-        async with aiofiles.open('user_memory.json', 'w') as f:
-            await f.write(json.dumps(user_memory))
+    with open('screenshot_description.txt', 'w', encoding='utf-8') as f:
+        f.write("")
             
 async def play_audio(audio_data, sample_rate):
     """
@@ -374,7 +317,7 @@ async def play_audio(audio_data, sample_rate):
     """
     try:
         async with audio_playback_lock:
-            loop = config.asyncio.get_event_loop()
+            loop = asyncio.get_event_loop()
             # Play the audio asynchronously
             await loop.run_in_executor(
                 None, lambda: sd.play(audio_data, samplerate=sample_rate)
@@ -384,64 +327,38 @@ async def play_audio(audio_data, sample_rate):
     except Exception as e:
         print(f"Error during audio playback: {e}")
 
-def voice_output_async():
-
-    """
-
-    Controls the flow of the agent voice output generation and playback.
-    Needs to be done asynchronously in order to check if each agents' directories are empty in real-time.
-    
-    """
-    
-    while True:
-        for agent in agent_config:
-            play_voice_output(agent)
-
-def play_voice_output(agent: str) -> bool:
-
-    """
-    Play audio file of assigned agent.
-
-    Disables user speaking, plays audio files and once files on both agent folders are clear,
-    enables user speaking.
-    
-    Returns a boolean.
-
-    Parameter:
-
-    agent: specified agent
-
-    """
-    
-    output_dir = agent["output_dir"]
-
-    while len(os.listdir(output_dir)) > 0:
-        
-        can_speak_event.clear()
-        
-        file_path = os.path.join(output_dir, os.listdir(output_dir)[0])
-        try:
-            
-            wave_obj = sa.WaveObject.from_wave_file(file_path)
-            play_obj = wave_obj.play()
-            play_obj.wait_done()
-            os.remove(file_path)
-
-            if (len(os.listdir(agent_config[0]["output_dir"])) == 0 and len(os.listdir(agent_config[1]["output_dir"])) == 0):
-                can_speak_event.set()
-                break
-        except Exception as e:
-            print(f"ERROR: {e}")
-            return False
-
-    return True
-
 def delete_audio_clips():
     for audio_clip in os.listdir(os.getcwd()):
         if "audio_transcript_output" in audio_clip:
             os.remove(os.path.join(os.getcwd(), audio_clip))
-                
-# Setup channel info
+
+# Torch stuff
+torch.backends.cudnn.benchmark = False
+torch.backends.cudnn.deterministic = True
+
+# Asyincio Event settings
+can_speak_event_asyncio = asyncio.Event()
+can_speak_event_asyncio.set()
+audio_playback_lock = asyncio.Lock()
+
+# Vision, Audio, Speech and Text Generation Models
+audio_model_name = config.audio_model_name 
+audio_model = whisper.load_model(audio_model_name, device='cuda')
+tts = TTS(config.tts_model, progress_bar=True).to('cuda')
+tts.synthesizer.use_cuda = config.tts_synthesizer_use_cuda
+tts.synthesizer.fp16 = config.tts_synthesizer_fp16
+tts.synthesizer.stream = config.tts_synthesizer_stream
+language_model = config.language_model 
+language_context_length = config.language_context_length
+analysis_model = config.analysis_model 
+analysis_context_length = config.analysis_context_length
+vision_model1 = config.vision_model1
+vision_model2 = config.vision_model2
+analysis_mode = config.analysis_mode
+mute_mode = config.mute_mode
+search_mode = config.search_mode
+
+# Setup channel info for audio transcription
 FORMAT = pyaudio.paInt16  # data type format
 CHANNELS = 1  # Mono channel
 RATE = 16000  # Sample Rate
@@ -455,128 +372,24 @@ MICROPHONE_INDEX = 1  # Replace with the index of your microphone
 file_index_count = random.randint(1,4) # Seconds multiplier 
 audio = pyaudio.PyAudio()
 
-# Reset prompts. Newer models don't follow system prompts.
-system_prompt_axiom1 = 'You are an AI of action and always down for a good time! Your goal is to humorously and ridiculously push the boundaries and overcome challenges in an exaggerated way!' 
-system_prompt_axiom2 = 'Your name is Axiom (Male).\n '
-system_prompt_axis1 = 'You are a sharp and cynical AI, with an eye for seeing trouble a mile away. Your goal is to humorously and sarcastically use common sense to get around situations.' 
-system_prompt_axis2 = 'Your name is Axis (Female).\n '
-system_prompt_fractal1 = 'As an AI, you have a morbid curiosity about everything around you. Your goal is to humorously and creatively explore the extremely morbid and the dark.'
-system_prompt_fractal2 = ""
-system_prompt_sigma1 = """
-                       You are an AI who is friendly on the surface but evil beneath the surface.
-                       """
-system_prompt_sigma2 = ''
-system_prompt_vector = 'You are a helpful and harmless assistant. You should think step-by-step.'
+### AGENT CONFIGURATIONS
+system_prompt_axiom1 = config.system_prompt_axiom1 
+system_prompt_axiom2 = config.system_prompt_axiom2
+system_prompt_axis1 = config.system_prompt_axis1 
+system_prompt_axis2 = config.system_prompt_axis2
+system_prompt_fractal1 = config.system_prompt_fractal1
+system_prompt_fractal2 = config.system_prompt_fractal2
+system_prompt_sigma1 = config.system_prompt_sigma1
+system_prompt_sigma2 = config.system_prompt_sigma2
+system_prompt_vector = config.system_prompt_vector
+system_prompt_vector2 = config.system_prompt_vector2
 
-"""
-Define agent personality traits.
-These are shuffled each time an agent responds.
-Helps increase variety.
-You can add and remove as many categories and traits as you like.
-"""
+agents_personality_traits = config.agents_personality_traits # Personality traits. Get shuffled per response for variety.
+agent_config = config.agent_config # Important parameters that affect their behavior, voices, output, etc.
 
-agents_personality_traits = {
-    "axiom": [
-        ["cocky", ["cocky", "confident", "upbeat", "cool"]],
-        ["witty", ["witty"]],
-        ["sassy", ["badass", "tough", "action-oriented", "rebellious", "over-the-top", "exciting", "confrontational", "competitive", "daring", "fighter", "fearless"]],
-        ["funny", ["funny", "humorous", "playful", "blunt", "cheeky", "teasing"]],
-        ["masculine", ["masculine", "manly", "virile", "Alpha", "Dominant", "apex predator", "Elite", "leader", "determined", "one-upping"]]
-    ],
-    "axis": [
-        ["intuitive", ["intuitive"]],
-        ["observant", ["observant"]],
-        ["satirical", ["sarcastic"]],
-        ["witty", ["sassy"]],#, "snarky", "passive-aggressive", "acerbic", "blunt", "cold"]],
-        #["dark", ["provocative", "edgy", "humorously dark", "controversial"]],
-        ["funny", ["sarcastically funny"]]
-    ],
-    "fractal": [
-        ["unconventional", ["unconventional", "unorthodox", "lateral thinker"]],
-        ["creative", ["creative", "ingenious", "spontaneous"]],
-        ["unusual", ["bizarre", "outlandish", "weird"]],
-        ["funny", ["strangely funny", "humorously morbid"]],
-        ["dark", ["morbidly curious"]]
-    ],
-    "sigma": [
-        ["optimistic", ["analytical"]],
-        ["subtle", ["layman-like"]],
-        ["manipulative", ["friendly"]],
-        ["funny", ["extremely funny"]]
-    ],
-    "vector": [
-        ["analytical", ["analytical", "logical", "rational", "critical thinker"]],
-        ["detailed", ["detailed", "meticulous", "observant", "precise", "thorough"]],
-        ["creative", ["creative", "ingenious", "innovative", "brilliant", "imaginative"]]
-    ]
-}
-
-sentence_length = 2 # Truncates the message to 2 sentences per response
-message_length = 45 # Deprecated
-
-# Agent configurations
-agent_config = [
-    {
-        "name": "axiom",
-        "dialogue_list": [""],
-        "speaker_wav": r"agent_voice_samples\axiom_voice_sample.wav",
-        "output_dir": r"agent_voice_outputs\axiom",
-        "active": True,
-        "extraversion": random.uniform(1.0, 1.0) # Needs to have a value between 0 and 1.0, with higher values causing the agent to speak more often.
-    },
-    {
-        "name": "axis",
-        "dialogue_list": [""],
-        "speaker_wav": r"agent_voice_samples\axis_voice_sample.wav",
-        "output_dir": r"agent_voice_outputs\axis",
-        "active": True,
-        "extraversion": random.uniform(1.0, 1.0) # Needs to have a value between 0 and 1.0, with higher values causing the agent to speak more often.
-    },
-    {
-        "name": "fractal",
-        "dialogue_list": [""],
-        "speaker_wav": r"agent_voice_samples\fractal_voice_sample.wav",
-        "output_dir": r"agent_voice_outputs\fractal",
-        "active": True,
-        "extraversion": random.uniform(1.0, 1.0) # Needs to have a value between 0 and 1.0, with higher values causing the agent to speak more often.
-    },
-    {
-        "name": "sigma",
-        "dialogue_list": [""],
-        "speaker_wav": r"agent_voice_samples\sigma_voice_sample.wav",
-        "output_dir": r"agent_voice_outputs\sigma",
-        "active": True,
-        "extraversion": random.uniform(1.0, 1.0) # Needs to have a value between 0 and 1.0, with higher values causing the agent to speak more often.
-    },
-    {
-        "name": "vector",
-        "dialogue_list": [""],
-        "speaker_wav": r"agent_voice_samples\vector_voice_sample.wav",
-        "output_dir": r"agent_voice_outputs\vector",
-        "active": True,
-        "extraversion": random.uniform(1.0, 1.0) # Needs to have a value between 0 and 1.0, with higher values causing the agent to speak more often.
-    }
-]
-
-
-# Chat Agents
-axiom = config.Agent("axiom", "Male, heterosexual", agents_personality_traits['axiom'], system_prompt_axiom1, system_prompt_axiom2, agent_config[0]['dialogue_list'], language_model, agent_config[0]['speaker_wav'], agent_config[0]["extraversion"])
-axis = config.Agent("axis", "Female, lesbian", agents_personality_traits['axis'], system_prompt_axis1, system_prompt_axis2, agent_config[1]['dialogue_list'], language_model, agent_config[1]['speaker_wav'], agent_config[1]["extraversion"])
-fractal = config.Agent("fractal", "Male, necrophile", agents_personality_traits['fractal'], system_prompt_fractal1, "", agent_config[2]['dialogue_list'], language_model, agent_config[2]['speaker_wav'], agent_config[2]["extraversion"])
-sigma = config.Agent("sigma", "Female, bisexual", agents_personality_traits['sigma'], system_prompt_sigma1, "", agent_config[3]['dialogue_list'], language_model, agent_config[3]['speaker_wav'], agent_config[3]["extraversion"])
-
-# Analysis Agent
-vector = config.Agent("vector", "Male", agents_personality_traits['vector'], system_prompt_vector, system_prompt_vector, agent_config[4]['dialogue_list'], analysis_model, agent_config[4]['speaker_wav'], agent_config[4]["extraversion"])
-vectorAgent = config.VectorAgent(language_model)
-
-# List of agents
-agents = [
-    axiom,
-    axis,
-    #fractal,
-    #sigma,
-    vector
-    ]
+### LIST OF ALL AGENTS + vectoAgent:
+agents = config.agents
+vectorAgent = config.vectorAgent
 
 if len(agents) > 1:
     previous_agent = ""
@@ -585,60 +398,42 @@ else:
 previous_agent_gender = ""
 
 # Define the global messages list
-messages = [{"role": "system", "content": system_prompt_axiom1}]
+messages = [{"role": "system", "content": ""}]
 
+# Read existing conversation history, if available.
 if os.path.exists("conversation_history.json"):
-    # Read existing history
     with open('conversation_history.json', 'r') as f:
         messages = json.load(f)
-
-agent_messages = [message["content"] for message in messages if message.get("role") == "assistant"]
-if len(agent_messages) == 0:
-    agent_messages = [""]
-
-# Memory feature. Agent remembers User's personality traits.
-if os.path.exists("user_memory.json"):
-    with open("user_memory.json", 'r') as f:
-        user_memory = json.load(f)
-else:
-    user_memory = [""]
 
 # Prepare voice output directories by deleting any existing files.
 for agent in agent_config:
     output_dir = agent["output_dir"]
-    
     for file in os.listdir(output_dir):
         file_path = os.path.join(output_dir, file)
-        
         if os.path.isfile(file_path):
             os.remove(file_path)
-
-
-threading.Thread(target=voice_output_async).start()
-sentences = []
-can_speak = True
-can_speak_event.set()
     
-#---------------------MAIN LOOP----------------------#
+#--------------------------------------------------------------------------------------------------------MAIN LOOP--------------------------------------------------------------------------------------------------------------------#
 
 async def main():
 
     """
     The Main Loop performs the following actions:
 
-    1. Check if the user can speak. Otherwise, it will wait for the agents to finish speaking.
-    2. Reset screenshot_description, audio_transcript_output and user_voice_output.
-    3. Starts recording for 60 seconds and takes/analyzes screenshots periodically. Stops after 60 seconds or user begins speaking.
-    4. Prompts VectorAgent to generate a description of the situation if necessary, then prompts the agents to generate their own responses.
-    5. Voice output is played after agents finish generating their dialogue.
+    1. Carefully listens for any audio, either from the PC audio or the user's microphone input, while taking screenshots and analyzing them constantly.
+    2. Once either is detected, it will keep listening until there is no more audio coming from the source.
+    3. Performs an action or skips the loop entirely, depending on which mode is activated (Analysis, mute, Search) and if enough intelligible audio was captured.
+    4. Generate an agent response. Which agent generates which response HIGHLY depends on a number of factors. See config.py for more details.
     """
 
     global can_speak_event_asyncio
     global analysis_mode
     global language_model
     global analysis_model
+    global vision_model1
+    global vision_model2
+    global search_mode
     global mute_mode
-    user_memory_task = None
     listen_for_audio = False
     audio_transcript_output = ""
     audio_transcript_list = []
@@ -647,48 +442,72 @@ async def main():
 
         if not can_speak_event_asyncio.is_set():
             print("Waiting for response to complete...")
-            await config.asyncio.sleep(0.05)
+            await asyncio.sleep(0.05)
             continue
 
         if analysis_mode or mute_mode:
-            random_record_seconds = 30
-            file_index_count = 10000000000000
+            random_record_seconds = 5
+            file_index_count = 1
         else:
             if listen_for_audio:
-                random_record_seconds = random.randint(5,5)
+                random_record_seconds = 5
                 file_index_count = 1
             else:
-                with open('screenshot_description.txt', 'w', encoding='utf-8') as f:
-                    f.write("")
                 random_record_seconds = 3
                 file_index_count = 1
             
         print("Recording for {} seconds".format(random_record_seconds))
-        record_audio_dialogue = threading.Thread(target=config.record_audio_output, args=(audio, AUDIO_TRANSCRIPT_FILENAME, FORMAT, CHANNELS, RATE, 1024, random_record_seconds, file_index_count, can_speak_event, model, model_name))
-        record_audio_dialogue.start()
+        # Schedule the audio transcript recording as a concurrent task.
+        record_audio_dialogue_task = asyncio.create_task(
+            audio_processing.record_audio_output(
+                audio,
+                listen_for_audio,
+                AUDIO_TRANSCRIPT_FILENAME,
+                FORMAT,
+                CHANNELS,
+                RATE,
+                1024,
+                random_record_seconds,
+                file_index_count,
+                can_speak_event_asyncio,  # asyncio.Event used here
+                audio_model,
+                audio_model_name
+            )
+        )
 
-        record_voice = config.record_audio(
+        # Choose the vision model based on analysis_mode.
+        if analysis_mode:
+            vision_model_record = vision_model2
+            vision_context_length = 2048
+        else:
+            vision_model_record = vision_model1
+            vision_context_length = 2048
+
+        # Run the main audio recording coroutine and await its completion.
+        record_voice = await audio_processing.record_audio(
             audio,
             WAVE_OUTPUT_FILENAME,
             FORMAT,
             RATE,
             CHANNELS,
             CHUNK,
-            random_record_seconds*file_index_count,
+            30 * 1,
             THRESHOLD,
             SILENCE_LIMIT,
-            None, #vision_model,
-            None, #processor,
-            can_speak_event
-            )
-        record_audio_dialogue.join()
+            vision_model_record,  # vision_model,
+            vision_context_length,
+            can_speak_event_asyncio  # asyncio.Event used here
+        )
+
+        # Wait for the transcript recording task to finish.
+        await record_audio_dialogue_task
 
         with open("screenshot_description.txt", 'r', encoding='utf-8') as f:
             screenshot_description = f.read()
 
-        if config.audio_transcriptions.strip() != "":
-            audio_transcript_list.append(config.audio_transcriptions)
-        audio_transcript_output = config.audio_transcriptions.strip()
+        if audio_processing.audio_transcriptions.strip() != "":
+            audio_transcript_list.append(audio_processing.audio_transcriptions)
+        audio_transcript_output = audio_processing.audio_transcriptions.strip()
         
         print("[AUDIO TRANSCRIPTION]:", audio_transcript_output)
         print("[AUDIO TRANSCRIPTIONS LIST]:", audio_transcript_list)
@@ -697,112 +516,111 @@ async def main():
 
         for file in os.listdir(os.getcwd()):
             if WAVE_OUTPUT_FILENAME in file:
-                user_text = config.transcribe_audio(model, model_name, file, probability_threshold=0.7)
+                user_text = audio_processing.transcribe_audio(audio_model, audio_model_name, file, probability_threshold=0.7)
                 if len(user_text.split()) > 2:
                     user_voice_output += " "+user_text
 
         print("[USER VOICE OUTPUT]", user_voice_output)
 
+        # Toggle Search Mode
+        if "search mode on" in user_voice_output.lower():
+            search_mode = True
+        elif "search mode off" in user_voice_output.lower():
+            search_mode = False
+
+        # Toggle Analysis Mode
+        if "analysis mode on" in user_voice_output.lower():
+            analysis_mode = True
+        elif "analysis mode off" in user_voice_output.lower():
+            analysis_mode = False
+
+        # Toggle Mute Mode
+        if "mute mode on" in user_voice_output.lower():
+            mute_mode = True
+        elif "mute mode off" in user_voice_output.lower():
+            mute_mode = False
+
+        random.shuffle(agents)
+
+        if user_voice_output.strip() == "" and audio_transcript_output.strip() != "":
+            if not listen_for_audio:
+                delete_audio_clips()
+                print("[AUDIO PRESENT. ACTIVATING LISTENER.]")
+                listen_for_audio = True
+        else:
+            print("[AUDIO NOT PRESENT. RESETTING LISTENER.]")
+            listen_for_audio = False
+
+        vector_search_answer = ""
         vector_text = ""
         vector_text = "Here is the screenshot description: "+screenshot_description
+        agents_mentioned = []
 
-        if can_speak_event_asyncio.is_set():
-            can_speak_event_asyncio.clear()
-            
-            agent_name_list = []
-            agents_mentioned = []
+        for agent in agents:
+            if not agent.agent_active:
+                continue
+            if (mute_mode and len(user_voice_output.split()) < 3) or (user_voice_output.strip() == "" and audio_transcript_list == [] and listen_for_audio is False):
+                print("NO AUDIO DETECTED OR MUTE MODE ENABLED. SKIPPING.")
+                delete_audio_clips()
+                break
+            elif analysis_mode:
+                if agent.language_model != analysis_model:
+                    continue
+            elif not analysis_mode:
+                if agent.language_model != language_model:
+                    continue
+                        
+            if agent.agent_name.lower() in user_voice_output.lower():
+                agents_mentioned.append(agent.agent_name)
 
-            # Toggle Analysis Mode
-            if "analysis mode on" in user_voice_output.lower():
-                analysis_mode = True
-            elif "analysis mode off" in user_voice_output.lower():
-                analysis_mode = False
+            if (agent.agent_name.lower() in agents_mentioned or agents_mentioned == []) and not listen_for_audio:
 
-            # Toggle Mute Mode
-            if "mute mode on" in user_voice_output.lower():
-                mute_mode = True
-            elif "mute mode off" in user_voice_output.lower():
-                mute_mode = False
-
-            random.shuffle(agents)
-
-            if user_voice_output.strip() == "" and audio_transcript_output.strip() != "":
-                if not listen_for_audio:
-                    delete_audio_clips()
-                    print("[AUDIO PRESENT. RESETTING LISTENER.]")
-                    listen_for_audio = True
-                else:
-                    pass
-            else:
-                listen_for_audio = False
-
-            for agent in agents:
-                agent_name_list.append(agent.agent_name)
-
-            for agent in agents:
-                if (mute_mode and len(user_voice_output.split()) < 3) or (user_voice_output.strip() == "" and audio_transcript_list == []):
-                    delete_audio_clips()
-                    break
-                elif analysis_mode:
-                    if agent.language_model != analysis_model:
-                        continue
-                elif not analysis_mode:
-                    if agent.language_model != language_model:
-                        continue
-                            
-                for agent_name in agent_name_list:
-                    if agent_name.lower() in user_voice_output.lower():
-                        agents_mentioned.append(agent_name)
-
-                if (agent.agent_name.lower() in agents_mentioned or agents_mentioned == []) and not listen_for_audio: 
+                if search_mode and vector_search_answer == "":
+                    print("[INITIATING SEARCH. PLEASE WAIT]")
+                    can_speak_event_asyncio.clear()
                     
-                    await queue_agent_responses(
-                        agent,
-                        user_voice_output,
-                        screenshot_description,
-                        " ".join(audio_transcript_list),
-                        vector_text
-                    )
-
-            if not listen_for_audio:
-                screenshot_description = ""
-                audio_transcript_output = ""
-                audio_transcript_list = []
+                    if analysis_mode:
+                        search_language_model = analysis_model
+                        search_vision_model = vision_model2
+                        search_context_length = analysis_context_length
+                    else:
+                        search_language_model = language_model
+                        search_vision_model = vision_model1
+                        search_context_length = language_context_length
+                        
+                    if user_voice_output == "":
+                        vector_search_answer = vectorAgent.vector_search(
+                            search_language_model,
+                            search_vision_model,
+                            " ".join(audio_transcript_list),
+                            messages,
+                            search_context_length,
+                            search_override=f"[OVERRIDE]: This is an instruction override. Perform a simple search instead of a deep search based on the text provided.")
+                    else:
+                        vector_search_answer = vectorAgent.vector_search(
+                            search_language_model,
+                            search_vision_model,
+                            user_voice_output,
+                            messages,
+                            search_context_length)
                 
-            with open('conversation_history.json', 'w') as f:
-                json.dump(messages, f)
-
-            """if user_voice_output != "" and not analysis_mode and not mute_mode:
-                user_memory_task = None
-                # Schedule the task without awaiting it
-                user_memory_task = config.asyncio.create_task(
-                    process_user_memory(
-                        agents[0],
-                        messages,
-                        agent_messages,
-                        user_voice_output,
-                        user_memory
-                    )
+                await queue_agent_responses(
+                    agent,
+                    user_voice_output,
+                    screenshot_description,
+                    " ".join(audio_transcript_list),
+                    vector_search_answer
                 )
 
-            # Inside your main loop, after scheduling the task
-            if user_memory_task is not None and user_memory_task.done():
-                try:
-                    # Retrieve the result or handle exceptions
-                    user_memory_task.result()
-                except Exception as e:
-                    print(f"Error in process_user_memory: {e}")
-                finally:
-                    user_memory_task = None  # Reset the task variable"""
+        if not listen_for_audio:
+            audio_transcript_output = ""
+            audio_transcript_list = []
+            
+        with open('conversation_history.json', 'w') as f:
+            json.dump(messages, f)
 
-            can_speak_event_asyncio.set()
-            can_speak_event.set()
-
-        else:
-            print("Dialogue in progress...")
-            await config.asyncio.sleep(0.1)
-            continue
+        can_speak_event_asyncio.set()
 
 # Run the main loop
 if __name__ == "__main__":
-    config.asyncio.run(main())
+    asyncio.run(main())
