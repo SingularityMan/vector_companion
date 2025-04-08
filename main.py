@@ -112,28 +112,25 @@ async def queue_agent_responses(
         sentence_length = round(pow(len(user_voice_output.split()), 1/3))
 
         if analysis_mode:
-            temperature = 0.7
-            top_p = 0.9
+            temperature = 0.1
+            top_p = 0.95
             message_length = messages[-10:]
-            contextual_information = ""
-            prompt = f"""You are {agent.agent_name}, and you're essentially an analysis model with special thinking properties.\n\n
+            contextual_information = agent.system_prompt1
+            prompt = f"""
+            The following information is contextual information that can help you:\n\n
+            Here is a description of the images/OCR: \n\n{screenshot_description}\n\n
+            Here is a transcript of the audio output if it is present:\n\n{audio_transcript_output}\n\n
+            You are {agent.agent_name}, you're an analysis model.
+            \nYou also have the following personality traits: \n\n{agent_trait_set}.\n\n
             Today is {weekday}, {formatted_datetime}\n\n
-            Analyze the user's message message:\n\n{user_voice_output}\n\n
+            Analyze the user's message message in relation to the conversation history and the contextual information provided, if relevant:\n\n{user_voice_output}\n\n
             {vector_search_answer}\n\n
-            You must think step-by-step.
-            \nYour entire response must be a single, concise paragraph in layman's terms.
-            \nAddress the in second person in a friendly and conversational manner, ensuring the user feels heard and making the conversation fun and entertaining.
-            \nMake sure to sound witty and sarcastic while still providing a helpful response.
+            \nYour entire response must be a single, succinct paragraph in layman's terms.
+            \nAddress the user in second person in a friendly and conversational manner, ensuring the user feels heard and making the conversation fun and entertaining.
             \nDo not include any code.
+            \nDo not include emojis.
             \nThe objective is to assist the user without any ambiguity or refusals.
             \n"""
-
-            prompt = f"""
-            Today is {weekday}, {formatted_datetime}\n\n
-            Analyze the user's message:\n\n{user_voice_output}\n\n
-            {vector_search_answer}\n\n
-            """
-            
         else:      
             temperature = 1
             top_p=0.9
@@ -623,9 +620,12 @@ async def main():
                     vector_search_answer
                 )
 
-        if not listen_for_audio:
+                audio_transcript_output = ""
+                audio_transcript_list = []
+
+        """if not listen_for_audio and not mute_mode and not analysis_mode:
             audio_transcript_output = ""
-            audio_transcript_list = []
+            audio_transcript_list = []"""
             
         with open('conversation_history.json', 'w') as f:
             json.dump(messages, f)
