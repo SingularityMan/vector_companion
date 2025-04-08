@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
-
 import os
+import platform
 import wave
 import audioop
 import pyaudio
@@ -11,6 +11,47 @@ from config.image_processing import image_lock, run_image_description
 from config.text_processing import remove_repetitive_phrases, remove_repetitive_phrases, find_repeated_words
 
 audio_transcriptions = ""
+
+def find_device_index(p: pyaudio.PyAudio, role: str) -> int | None:
+    """
+    Find the correct audio device index based on the platform and role.
+
+    Parameters:
+      p: PyAudio instance.
+      role: 'microphone' for user mic input or 'loopback' for capturing playback via a virtual cable.
+      
+    Returns:
+      The device index if found, otherwise None.
+    """
+    system = platform.system()
+    identifier = ""
+    exclude_identifier = None
+
+    if role == "microphone":
+        if system == "Windows":
+            identifier = "Microphone"
+            exclude_identifier = "Microsoft"  # Sometimes the built-in one may include this
+        elif system == "Darwin":  # macOS
+            identifier = "Built-in"  # or change to a specific external mic name if needed
+        elif system == "Linux":
+            identifier = "Capture"  # Adjust if needed (depends on your device list)
+    elif role == "loopback":
+        if system == "Windows":
+            identifier = "CABLE Output"
+        elif system == "Darwin":
+            identifier = "BlackHole"  # or use "Soundflower" if you prefer that
+        elif system == "Linux":
+            identifier = "Monitor of VirtualLoopback"  # PulseAudio's virtual sink typically includes this phrase
+
+    for i in range(p.get_device_count()):
+        device_info = p.get_device_info_by_index(i)
+        name = device_info.get('name', '')
+        if identifier in name:
+            if exclude_identifier and exclude_identifier in name:
+                continue
+            #print(f"[DEBUG] Found device for role '{role}' on {system}: {name} (index {i})")
+            return i
+    return None
 
 async def record_audio(
     audio: str,
@@ -40,15 +81,11 @@ async def record_audio(
             # Create a PyAudio instance
             p = pyaudio.PyAudio()
 
-            # Find the device index of the VB-Cable adapter
-            device_index = None
-            for i in range(p.get_device_count()):
-                device_info = p.get_device_info_by_index(i)
-                #print(device_info)
-                if 'Microphone' in device_info['name'] and 'Microsoft' not in device_info['name']:  # Look for 'VB-Audio' instead of 'VB-Cable'
-                    print("[FOUND MICROPHONE. DEVICE INDEX SET TO]", i)
-                    device_index = i
-                    break
+            # Find the device index of the microphone
+            device_index =  device_index = find_device_index(p, "microphone")
+            if device_index is None:
+                print(f"[ERROR] Could not find a suitable microphone input device on {platform.system()}")
+                exit(1)
 
             # Cancel recording if Agent speaking
             if not can_speak_event.is_set():
@@ -201,17 +238,10 @@ async def record_audio_output(
             await asyncio.sleep(1)
             continue
 
-        # Find the device index of the VB-Cable adapter
-        device_index = None
-        for i in range(p.get_device_count()):
-            device_info = p.get_device_info_by_index(i)
-            #print(device_info)
-            if 'CABLE Output' in device_info['name']:  # Look for 'VB-Audio' instead of 'VB-Cable'
-                device_index = i
-                break
-
+        # Find the device index of the loopback software
+        device_index = find_device_index(p, "loopback")
         if device_index is None:
-            print("Could not find VB-Cable device")
+            print(f"[ERROR] Could not find a suitable loopback device on {platform.system()}")
             exit(1)
 
         # Open the stream for recording
