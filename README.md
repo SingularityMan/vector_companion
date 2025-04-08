@@ -85,7 +85,17 @@ conda activate vector_companion
 python main.py
 ```
 
-# Installing flash_attn on Windows
+# Installing Flash Attention
+
+## Linux
+
+`pip install flash-attn`
+
+## Windows
+
+Windows does not have official support for Flash Attention, but it is impossible to install it.
+This will be a very lengthy and difficult process, so following each step carefully will get you there.
+
 ### Installing Microsoft Visual Studio Code 
 Install Microsoft Visual Studio Code's latest version (2022) that is compatible with your CUDA version (12.2 or greater) and in the installer, make sure to include these capabilities:
    - MSVC v143 - VS 2022 C++ x64/x86 build tools (x86 & x84)
