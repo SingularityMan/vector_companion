@@ -62,8 +62,8 @@ They transcribe audio output and user microphone input simultaneously while peri
 
   - Alternatively, you can use `pavucontrol` to route specific application outputs to the VirtualLoopback device.
 
-  - Finally, If you want this setup available each time you start your system, you can add the module load command to your PulseAudio configuration. 
-  Editing your default.pa (usually found in /etc/pulse/ or ~/.config/pulse/) and adding the following:
+  - Finally, If you want this setup available each time you start your system, you can add the module load command to your `PulseAudio` configuration. 
+  Editing your `default.pa` (usually found in `/etc/pulse/` or `~/.config/pulse/`) and adding the following:
    
   `load-module module-null-sink sink_name=VirtualLoopback sink_properties=device.description=VirtualLoopback`
 
