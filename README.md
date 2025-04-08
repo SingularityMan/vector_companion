@@ -93,7 +93,7 @@ python main.py
 
 ## Windows
 
-Windows does not have official support for Flash Attention, but it is impossible to install it.
+Windows does not have official support for Flash Attention, but it is possible to install it.
 This will be a very lengthy and difficult process, so following each step carefully will get you there.
 
 ### Installing Microsoft Visual Studio Code 
