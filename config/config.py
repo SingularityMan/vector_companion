@@ -17,7 +17,7 @@ tts_synthesizer_stream = True
 language_model = "JollyLlama/gemma-3-27b-it-q4_0_Small-QAT:latest" # Used for general chatting. Replace with whatever language model you'd like.
 language_context_length = 4096
 
-analysis_model = "deepseek-r1:14b-qwen-distill-q8_0" # Needs to be a thinking model, any thinking model, particularly one that uses <think> tags to signal its thought process.
+analysis_model = "qwq:32b-q8_0" # Needs to be a thinking model, any thinking model, particularly one that uses <think> tags to signal its thought process.
 analysis_context_length = 4096
 
 # Vision models (Chatting and reasoning. If the same model, make sure num_context is the same to prevent annoying model reloads.)
@@ -57,17 +57,16 @@ system_prompt_sigma1 = """
                        You are Sigma, an AI who is extremely persuasive and fun to talk to.
                        """
 system_prompt_sigma2 = ''
-system_prompt_vector = 'You are Vector, a helpful and harmless assistant. You should think step-by-step.'
-system_prompt_vector2 = ("""Your role as an assistant is to engage in deep, methodical reasoning and provide comprehensive, accurate solutions.
-                        Before arriving at a final answer, you must undertake a structured, multi-phase thinking process that emphasizes depth, verification, and clarity.
-                        This involves thoroughly analyzing the question, identifying key elements, summarizing relevant insights,
-                        generating hypotheses, iteratively refining thoughts, verifying assumptions, cross-checking with prior knowledge, and reevaluating earlier conclusions as necessary.
-                        Your response must be structured into two main sections: Thought and Solution.
-                        In the Thought section, rigorously document your reasoning in the following format: <|begin_of_thought|> \{thought process with each logical step separated by '\\n\\n'\} <|end_of_thought|>.
-                        Each step should reflect deep analysis—such as decomposing the problem, synthesizing relevant information, exploring different possibilities, validating each phase, correcting errors, and revisiting earlier assumptions.
-                        In the Solution section, consolidate all your insights and reasoned steps into a concise, well-structured final answer.
-                        Present it clearly and logically using this format: <|begin_of_solution|> \{final, precise, step-by-step solution\} <|end_of_solution|>.
-                        This approach ensures that the final output reflects a high-confidence answer that results from critical thinking and iteration. Now, try to solve the following question through the above guidelines:""")
+system_prompt_vector = """
+                       You are Vector, a helpful and harmless assistant.
+                       You should think step-by-step.
+                       \n\nMedium Reasoning Effort: You have sufficient time to think and respond to the user’s query, allowing for a more thoughtful and in-depth answer.
+                       However, be aware that the longer you take to reason and process, the greater the associated resource costs and potential consequences.
+                       While you should not rush, aim to balance the depth of your reasoning with efficiency.
+                       Prioritize providing a well-thought-out response, but do not overextend your thinking if the answer can be provided with a reasonable level of analysis.
+                       Use your reasoning time wisely, focusing on what is essential for delivering an accurate response without unnecessary delays and overthinking.
+                       """
+system_prompt_vector2 = ""
 
 ### AGENT PERSONALITY TRAITS.
 
@@ -109,8 +108,8 @@ agents_personality_traits = {
         #["funny", ["self-deprecating humor"]]
     ],
     "vector": [
-        ["analytical", ["analytical", "logical", "rational", "critical thinker"]],
-        ["detailed", ["detailed", "meticulous", "observant", "precise", "thorough"]],
+        ["analytical", ["Friendly"]],
+        ["detailed", ["easy-going"]],
         ["creative", ["creative", "ingenious", "innovative", "brilliant", "imaginative"]]
     ]
 }
@@ -122,7 +121,7 @@ agent_config = [
         "name": "axiom",
         "speaker_wav": r"agent_voice_samples\axiom_voice_sample.wav",
         "output_dir": r"agent_voice_outputs\axiom",
-        "active": True,
+        "active": False,
         "extraversion": random.uniform(1.0, 1.0) # Needs to have a value between 0 and 1.0, with higher values causing the agent to speak more often.
     },
     {
@@ -143,7 +142,7 @@ agent_config = [
         "name": "sigma",
         "speaker_wav": r"agent_voice_samples\sigma_voice_sample.wav",
         "output_dir": r"agent_voice_outputs\sigma",
-        "active": False,
+        "active": True,
         "extraversion": random.uniform(1.0, 1.0) # Needs to have a value between 0 and 1.0, with higher values causing the agent to speak more often.
     },
     {
@@ -162,7 +161,7 @@ fractal = agent_classes.Agent("fractal", "Male, necrophile", agents_personality_
 sigma = agent_classes.Agent("sigma", "Female, bisexual", agents_personality_traits['sigma'], system_prompt_sigma1, "", agent_config[3]["active"], language_model, vision_model1, language_context_length, agent_config[3]['speaker_wav'], agent_config[3]["extraversion"])
 
 # Analysis Agent, agent_classes.Agent to define each analysiss agent.
-vector = agent_classes.Agent("vector", "Male", agents_personality_traits['vector'], system_prompt_vector, system_prompt_vector2, agent_config[4]["active"], analysis_model, vision_model2, analysis_context_length, agent_config[-1]['speaker_wav'], agent_config[4]["extraversion"])
+vector = agent_classes.Agent("vector", "Male, asexual", agents_personality_traits['vector'], system_prompt_vector, system_prompt_vector2, agent_config[4]["active"], analysis_model, vision_model2, analysis_context_length, agent_config[-1]['speaker_wav'], agent_config[4]["extraversion"])
 
 # Task Agent, for agentic purposes, like Search Mode.
 vectorAgent = agent_classes.VectorAgent(language_model, analysis_model, vision_model2, analysis_context_length, None, None)
