@@ -35,14 +35,39 @@ They transcribe audio output and user microphone input simultaneously while peri
 
 ### Prerequisites
 
-**Note:** This framework is designed to run on Windows only.
-
 - VRAM requirements vary greatly, and it all depends on which models you use. To see which models are being used, please see `config.py`. You can swap these models out at any time.
-- You will need a `torch` version compatible with your CUDA version installed.
+- You will need a `torch` version compatible with your CUDA version installed (for Mac just install torch).
 - You need to install Ollama if you haven't already and download any models you'd like to use in Ollama.
-- You need VB Cable installed on your PC in order for Python to listen to your own PC.
 
-### Cloning
+## Audio Loop back
+
+### Windows:
+
+  - You will need VB-Cable installed on your PC to handle the audio loopback. 
+  - Once installed, link it to your headset via sound settings.
+
+### MacOS
+
+  - Same as Windows, but instead you can install `Blackhole` or `Soundflower`
+
+### Linux
+
+  - You will need to create a Virtual Sink (Null Sink) to enable audio loop back. Simply run this command:
+
+   `pactl load-module module-null-sink sink_name=VirtualLoopback sink_properties=device.description=VirtualLoopback`
+  
+  - Then you may set it up as the default sink via the following:
+
+   `pactl set-default-sink VirtualLoopback`
+
+  - Alternatively, you can use `pavucontrol` to route specific application outputs to the VirtualLoopback device.
+
+  - Finally, If you want this setup available each time you start your system, you can add the module load command to your PulseAudio configuration. 
+  Editing your default.pa (usually found in /etc/pulse/ or ~/.config/pulse/) and adding the following:
+   
+  `load-module module-null-sink sink_name=VirtualLoopback sink_properties=device.description=VirtualLoopback`
+
+## Cloning
 
 ```
 git clone https://github.com/SingularityMan/vector_companion.git
@@ -51,10 +76,6 @@ conda create --name vector_companion
 conda activate vector_companion
 pip install -r requirements.txt
 ```
-### Configuring VB Cable-Compatible Headset
-On Windows, install VB Cable so Python can listen to the computer's audio output in real-time.
-Once installed, link VB Cable to the device (presumably your headset) via Windows Sound settings so Python can accurately capture the sound.
-Ensure VB Cable is selected as your speaker once it is configured, otherwise Vector Companion won't be able to hear audio.
 
 ### Usage
 After meeting the necessary prerequisites, installing the required dependencies, and configuring then troubleshooting any VB Cable issues (listed below), simply run `activate.bat` or `main.py`.
