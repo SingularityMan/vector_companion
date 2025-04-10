@@ -10,14 +10,11 @@ import datetime
 import whisper
 import pyaudio
 import sounddevice as sd
-from transformers import AutoProcessor, AutoModelForCausalLM
 from TTS.api import TTS
 import torch
 import asyncio
 
-import config.agent_classes as agent_classes
 import config.text_processing as text_processing
-import config.image_processing as image_processing
 import config.audio_processing as audio_processing
 import config.config as config
 
@@ -68,11 +65,12 @@ async def queue_agent_responses(
     contextual_information = ""
 
     filtered_agents = [a.agent_name for a in agents if a.agent_name != agent.agent_name and a.language_model != analysis_model and a.agent_active]
+    active_agents = [a.agent_name for a in agents if a.language_model != analysis_model and a.agent_active]
     
     # Prepare the prompt
     if user_voice_output == "" and random.random() <= agent.extraversion and agent.language_model != analysis_model:
-        message_length = messages[-5:]
-        if len(filtered_agents) > 1:
+        message_length = messages[-10:]
+        if len(active_agents) > 1:
             prompt = (
                 f"""Here is a description of the images/OCR: \n\n{screenshot_description}\n\n
                 Here is a transcript of the audio output, if applicable (This is for contextual purposes only):\n\n{audio_transcript_output}\n\n
@@ -126,7 +124,7 @@ async def queue_agent_responses(
             Analyze the user's message message in relation to the conversation history and the contextual information provided, if relevant:\n\n{user_voice_output}\n\n
             {vector_search_answer}\n\n
             \nYour entire response must be a single, succinct paragraph in layman's terms.
-            \nAddress the user in second person in a friendly and conversational manner, ensuring the user feels heard and making the conversation fun and entertaining.
+            \nAddress the user in second person in a witty and conversational manner, ensuring the user feels heard and making the conversation fun and entertaining but also informative and helpful.
             \nDo not include any code.
             \nDo not include emojis.
             \nThe objective is to assist the user without any ambiguity or refusals.
@@ -135,7 +133,7 @@ async def queue_agent_responses(
             temperature = 1
             top_p=0.9
             message_length = messages[-10:]
-            if len(filtered_agents) > 1:
+            if len(active_agents) > 1:
                 prompt = f"""
                 Here is a description of the images/OCR: \n\n{screenshot_description}\n\n
                 Here is a transcript of the audio output if it is present:\n\n{audio_transcript_output}\n\n
@@ -399,10 +397,7 @@ agent_config = config.agent_config # Important parameters that affect their beha
 agents = config.agents
 vectorAgent = config.vectorAgent
 
-if len(agents) > 1:
-    previous_agent = ""
-else:
-    previous_agent = ""
+previous_agent = ""
 previous_agent_gender = ""
 
 # Define the global messages list
@@ -486,10 +481,10 @@ async def main():
         # Choose the vision model based on analysis_mode.
         if analysis_mode:
             vision_model_record = vision_model2
-            vision_context_length = 2048
+            vision_context_length = 1048
         else:
             vision_model_record = vision_model1
-            vision_context_length = 2048
+            vision_context_length = 1048
 
         # Run the main audio recording coroutine and await its completion.
         record_voice = await audio_processing.record_audio(
@@ -565,7 +560,14 @@ async def main():
         agents_mentioned = []
 
         for agent in agents:
-            if not agent.agent_active:
+            if agent.agent_active:
+                if f"remove {agent.agent_name}".lower() in user_voice_output.lower():
+                    agent.agent_active = False
+                    continue
+            elif f"add {agent.agent_name}".lower() in user_voice_output.lower():
+                agent.agent_active = True
+                user_voice_output = user_voice_output.replace(f"add {agent.agent_name}", "")
+            else:
                 continue
             if (mute_mode and len(user_voice_output.split()) < 3) or (user_voice_output.strip() == "" and audio_transcript_list == [] and listen_for_audio is False):
                 print("NO AUDIO DETECTED OR MUTE MODE ENABLED. SKIPPING.")
