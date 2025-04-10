@@ -26,6 +26,11 @@ Analysis mode activates all the agents in the `agents` list in `config.py` that 
 - All agents containing the `analysis_model` (recommend restricting to 1 agent with this capability) will not speak to the user unless spoken to. 
 - Once the user speaks, the analysis model will analyze the user's message along with the contextual information (screenshots, audio, etc.) using COT reasoning process, if applicable. This will cause the analysis_model to be muted while it processes its thoughts until it reaches an answer and speaks to the user. The user's personality traits will not be updated nor introduced to the analysis model. 
 
+### Adding and Removing agents.
+
+You can add and remove agents from the chat via voice commands at any time by saying `add <agent name>` and `remove <agent name>`. 
+This must be done for each agent you wish to add and remove.
+
 ### Search Mode
 
 You can toggle Search Mode by saying "Search Mode On" and "Search Mode Off". 
@@ -36,6 +41,20 @@ When Search Mode is enabled, `vectorAgent` will determine based on the user's me
 - `Deep Search` - The agent will recursively extract text from each search result and explore different links inside each search result until it no longer finds relevant links or is unable to proceed.
 It will then use praw to perform a search on reddit for relevant posts and threads to answer the user's inquiry.
 - `No Search` - The agent determined an online search is unecessary and will continue the conversation.
+
+Note: If multiple agents are in the chat and search mode is enabled, the search will be performed only once, regardless of category. 
+vectorAgent will still determine if a search is necessary or not, but it will evaluate that decision each time it is an agent's turn to speak so long as the search hasn't been attempted yet.
+
+### Chaining Commands together.
+
+You can actually include multiple commands in one voice message by simply speaking each command in the correct format in the same message. 
+For Example:
+
+```
+"Analysis mode off, add Axiom, add Axis, remove Sigma, search mode on, perform a deep search, etc."
+```
+This example command will disable Analysis Mode, add Axiom and Axis to the chat, remove Sigma from the chat, enable Search Mode and perform a deep search.
+
 
 ## Modifying Agent traits
 
