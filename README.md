@@ -35,9 +35,42 @@ They transcribe audio output and user microphone input simultaneously while peri
 
 ### Prerequisites
 
-- VRAM requirements vary greatly, and it all depends on which models you use. To see which models are being used, please see `config.py`. You can swap these models out at any time.
-- You will need a `torch` version compatible with your CUDA version installed (for Mac just install torch).
+- You will need `Python 3.10` or greater.
+- You will need a `torch` version compatible with your CUDA version (12.2 or greater, 12.4 recommended) installed (for Mac just install torch). 
+
+For example, to install pytorch 2.5.1 with CUDA 12.4 compatibility:
+
+```
+pip install torch==2.5.1+cu124 torchvision==0.20.1+cu124 torchaudio==2.5.1+cu124 --extra-index-url https://download.pytorch.org/whl/cu124
+
+```
+
 - You need to install Ollama if you haven't already and download any models you'd like to use in Ollama.
+
+## VRAM requirements:
+
+VRAM requirements vary greatly, and it all depends on which models you use. 
+To see which models are being used, please see `config.py`. You can swap these models out at any time.
+
+### Lower-bound example (12-15GB VRAM)
+
+| Component                  | Model/Description                                        | VRAM Requirement |
+|----------------------------|----------------------------------------------------------|------------------|
+| Language/Vision Model      | Gemma3-4b                                              | 7 GB             |
+| Analysis and Vision Models | Smallest thinking model + Gemma3-4b                      | ~14 GB           |
+| Whisper Base               | Whisper base                                             | < 1 GB           |
+| XTTSv2                     | XTTSv2                                                 | ~4 GB            |
+| **Total Range**            | (Depending on mode: Analysis vs Chat Mode)             | 12 - 19 GB       |
+
+### Upper-bound example (48GB VRAM or greater)
+
+| Component                  | Model/Description                                        | VRAM Requirement |
+|----------------------------|----------------------------------------------------------|------------------|
+| Language/Vision Model      | gemma-3-27b-it-q4_0_Small-QAT + Gemma3-4b (context_length-dependent)| 28 GB        |
+| Analysis and Vision Models | QWQ-32b + Gemma3-4b (with QWQ-32b at 4096 context length) | ~39 GB           |
+| WhisperV3 Turbo            | WhisperV3 Turbo                                          | ~5 GB            |
+| XTTSv2                     | XTTSv2                                                 | ~4 GB            |
+
 
 ## Audio Loop back
 
@@ -72,7 +105,7 @@ They transcribe audio output and user microphone input simultaneously while peri
 ```
 git clone https://github.com/SingularityMan/vector_companion.git
 cd vector_companion
-conda create --name vector_companion
+conda create --name vector_companion python=3.10
 conda activate vector_companion
 pip install -r requirements.txt
 ```
