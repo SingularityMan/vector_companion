@@ -4,12 +4,6 @@
 :: Uninstall existing flash-attn
 pip uninstall flash-attn
 
-
-:: Install torch stable
-pip uninstall torch torchvision torchaudio
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
-
-
 :: Install dependencies
 pip install packaging
 pip install wheel
@@ -38,7 +32,7 @@ python setup.py bdist_wheel
 
 :: pip install some-package.whl
 cd dist
-pip install flash_attn-2.6.3-cp311-cp311-win_amd64.whl
+pip install flash_attn-2.6.3-cp312-cp312-win_amd64.whl
 
 
 pause
