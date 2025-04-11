@@ -37,14 +37,6 @@ They transcribe audio output and user microphone input simultaneously while peri
 
 - You will need `Python 3.12`.
 - You also need to install `Ollama` if you haven't already and download any models you'd like to use in Ollama.
-- You will need a `torch` version compatible with your CUDA version (12.2 or greater, 12.4 recommended) installed (for Mac just install torch). 
-
-For example, to install pytorch 2.5.1 with CUDA 12.4 compatibility:
-
-```
-pip install torch==2.5.1+cu124 torchvision==0.20.1+cu124 torchaudio==2.5.1+cu124 --extra-index-url https://download.pytorch.org/whl/cu124
-
-```
 
 Then, clone the repo and install dependencies.
 
@@ -54,6 +46,14 @@ cd vector_companion
 conda create --name vector_companion python=3.12
 conda activate vector_companion
 pip install -r requirements.txt
+```
+- You will need a `torch` version compatible with your CUDA version (12.2 or greater, 12.4 recommended) installed (for Mac just install torch). 
+
+For example, to install pytorch 2.5.1 with CUDA 12.4 compatibility:
+
+```
+pip install torch==2.5.1+cu124 torchvision==0.20.1+cu124 torchaudio==2.5.1+cu124 --extra-index-url https://download.pytorch.org/whl/cu124
+
 ```
 
 ## VRAM requirements:
