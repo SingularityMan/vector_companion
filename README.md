@@ -35,7 +35,8 @@ They transcribe audio output and user microphone input simultaneously while peri
 
 ### Prerequisites
 
-- You will need `Python 3.10` or greater.
+- You will need `Python 3.12`.
+- You also need to install `Ollama` if you haven't already and download any models you'd like to use in Ollama.
 - You will need a `torch` version compatible with your CUDA version (12.2 or greater, 12.4 recommended) installed (for Mac just install torch). 
 
 For example, to install pytorch 2.5.1 with CUDA 12.4 compatibility:
@@ -45,7 +46,15 @@ pip install torch==2.5.1+cu124 torchvision==0.20.1+cu124 torchaudio==2.5.1+cu124
 
 ```
 
-- You need to install Ollama if you haven't already and download any models you'd like to use in Ollama.
+Then, clone the repo and install dependencies.
+
+```
+git clone https://github.com/SingularityMan/vector_companion.git
+cd vector_companion
+conda create --name vector_companion python=3.12
+conda activate vector_companion
+pip install -r requirements.txt
+```
 
 ## VRAM requirements:
 
@@ -99,16 +108,6 @@ To see which models are being used, please see `config.py`. You can swap these m
   Editing your `default.pa` (usually found in `/etc/pulse/` or `~/.config/pulse/`) and adding the following:
    
   `load-module module-null-sink sink_name=VirtualLoopback sink_properties=device.description=VirtualLoopback`
-
-## Cloning
-
-```
-git clone https://github.com/SingularityMan/vector_companion.git
-cd vector_companion
-conda create --name vector_companion python=3.10
-conda activate vector_companion
-pip install -r requirements.txt
-```
 
 ### Usage
 After meeting the necessary prerequisites, installing the required dependencies, and configuring then troubleshooting any VB Cable issues (listed below), simply run `activate.bat` or `main.py`.

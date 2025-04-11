@@ -407,14 +407,6 @@ messages = [{"role": "system", "content": ""}]
 if os.path.exists("conversation_history.json"):
     with open('conversation_history.json', 'r') as f:
         messages = json.load(f)
-
-# Prepare voice output directories by deleting any existing files.
-for agent in agent_config:
-    output_dir = agent["output_dir"]
-    for file in os.listdir(output_dir):
-        file_path = os.path.join(output_dir, file)
-        if os.path.isfile(file_path):
-            os.remove(file_path)
     
 #--------------------------------------------------------------------------------------------------------MAIN LOOP--------------------------------------------------------------------------------------------------------------------#
 

@@ -4,7 +4,6 @@ import re
 import asyncio
 
 import numpy as np
-import noisereduce as nr
 import soundfile as sf
 
 def split_buffer_into_sentences(buffer):
@@ -49,32 +48,7 @@ async def synthesize_sentence(tts, sentence, speaker_wav, sample_rate):
         audio = await loop.run_in_executor(
             None, lambda: tts.tts(text=sentence, speaker_wav=speaker_wav, language="en")
         )
-        # Check the type of 'audio' and process accordingly
-        if isinstance(audio, list):
-            # Convert list to NumPy array
-            audio_array = np.array(audio, dtype=np.float32)
-        elif isinstance(audio, np.ndarray):
-            # If it's already a NumPy array
-            audio_array = audio.astype(np.float32)
-        else:
-            raise TypeError(f"Unexpected audio type: {type(audio)}")
-
-        # Apply noise reduction
-        reduced_noise = nr.reduce_noise(
-        y=audio_array,
-        sr=sample_rate,
-        prop_decrease=0.0,
-        freq_mask_smooth_hz=1000,
-        time_mask_smooth_ms=100,
-        stationary=True,
-        n_fft=512,
-        win_length=512,
-        use_torch=True,
-        device='cuda'
-    )
-
-        return reduced_noise
-        #return audio
+        return audio
     except Exception as e:
         print(f"Error during TTS synthesis for sentence '{sentence}': {e}")
         return None
