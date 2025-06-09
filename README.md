@@ -6,6 +6,15 @@ Your friendly AI Companions, Here to accompany you everywhere you go on your com
 
 ![image](https://github.com/user-attachments/assets/f14a50e5-74e4-48a9-8e82-d9c0b5432b2a)
 
+# What's New
+
+### 06.09.2025 
+
+- **Added Think Mode** to support hybrid reasoning models.
+- **Improved Web Search Capabilities** - Now uses `duckduckgo_search` and `LangSearch API` for online searches, with better control over deep search.
+- **Significantly reduced latency** - Time to first sentence significantly reduced by removing bottlenecks. Speed depends on model size. 
+- **Improved system prompts** - Better system prompt utilization.
+
 ## Table of Contents
 
 - [Introduction](#introduction)
@@ -108,6 +117,20 @@ To see which models are being used, please see `config.py`. You can swap these m
   Editing your `default.pa` (usually found in `/etc/pulse/` or `~/.config/pulse/`) and adding the following:
    
   `load-module module-null-sink sink_name=VirtualLoopback sink_properties=device.description=VirtualLoopback`
+
+### LangSearch API
+
+Vector Companion will use either `duckduckgo search` or `LangSearch`, whichever is available, in order to perform online searches. In order to use `LangSearch` you will need an [API key](https://docs.langsearch.com/limits/api-limits) and store an environment variable called `LANGSEARCH_API_KEY`. Otherwise, Vector Companion will try to use duckduckgo_search instead.
+
+### Reddit PRAW
+
+In order to search reddit during Deep Search, you must create a [bot](https://www.reddit.com/r/reddit.com/wiki/api/) and store your credentials in the following environment variables:
+
+```
+REDDIT_CLIENT_ID
+REDDIT_CLIENT_SECRET
+REDDIT_USER_AGENT
+```
 
 ### Usage
 After meeting the necessary prerequisites, installing the required dependencies, and configuring then troubleshooting any VB Cable issues (listed below), simply run `activate.bat` or `main.py`.
