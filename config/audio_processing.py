@@ -27,7 +27,7 @@ def find_device_index(p: pyaudio.PyAudio, role: str) -> int | None:
     identifier = ""
     exclude_identifier = None
 
-    if role == "microphone":
+    if role.lower() == "microphone":
         if system == "Windows":
             identifier = "Microphone"
             exclude_identifier = "Microsoft"  # Sometimes the built-in one may include this
@@ -35,13 +35,16 @@ def find_device_index(p: pyaudio.PyAudio, role: str) -> int | None:
             identifier = "Built-in"  # or change to a specific external mic name if needed
         elif system == "Linux":
             identifier = "Capture"  # Adjust if needed (depends on your device list)
-    elif role == "loopback":
+    elif role.lower() == "loopback":
         if system == "Windows":
             identifier = "CABLE Output"
         elif system == "Darwin":
             identifier = "BlackHole"  # or use "Soundflower" if you prefer that
         elif system == "Linux":
             identifier = "Monitor of VirtualLoopback"  # PulseAudio's virtual sink typically includes this phrase
+    else:
+        if system == "Windows":
+            identifier = "CABLE Output"
 
     for i in range(p.get_device_count()):
         device_info = p.get_device_info_by_index(i)
@@ -81,8 +84,9 @@ async def record_audio(
             # Create a PyAudio instance
             p = pyaudio.PyAudio()
 
-            # Find the device index of the microphone
-            device_index =  device_index = find_device_index(p, "microphone")
+            # Find the device index of the microphone 
+            mic_mode = "microphone" 
+            device_index =  device_index = find_device_index(p, mic_mode)
             if device_index is None:
                 print(f"[ERROR] Could not find a suitable microphone input device on {platform.system()}")
                 exit(1)
@@ -112,10 +116,15 @@ async def record_audio(
 
                 # Spawn image description task only once for this session.
                 if not image_lock:
+                    pass
                     image_lock = True
                     image_desc_task = asyncio.create_task(
                         run_image_description(vision_model, vision_context_length, can_speak_event)
                     )
+
+                if image_desc_task.done():
+                    image_lock = False
+                    print("[IMAGE TASK DONE.]")
                 
                 if not can_speak_event.is_set():
                     await asyncio.sleep(0.05)
@@ -143,7 +152,7 @@ async def record_audio(
                 if rms >= THRESHOLD: #(ii >= int(RATE / CHUNK * RECORD_SECONDS)):
                     silence_start = loop.time()
                     if not recording_started:
-                        SILENCE_LIMIT = 0.75
+                        SILENCE_LIMIT = 1
                         recording_start_time = loop.time()
                         print("recording...")
                         THRESHOLD = 65
@@ -296,7 +305,7 @@ async def record_audio_output(
                 file_path = os.path.join(os.getcwd(), file)
                 if os.path.isfile(file_path):
                     audio_transcript_output = await loop.run_in_executor(
-                        None, lambda: transcribe_audio(model, model_name, file_path, RATE=16000, probability_threshold=0.7)
+                        None, lambda: transcribe_audio(model, model_name, file_path, RATE=16000, probability_threshold=0.5)
                     )
                     if len(audio_transcript_output.strip().split()) <= 3:
                         audio_transcript_output = ""
@@ -318,7 +327,7 @@ async def record_audio_output(
 
         frames = []
 
-def transcribe_audio(model: Any, model_name, WAVE_OUTPUT_FILENAME: str, RATE: int = 16000, probability_threshold=0.5) -> str:
+def transcribe_audio(model: Any, model_name, WAVE_OUTPUT_FILENAME: str, RATE: int = 16000, probability_threshold: float = 0.5) -> str:
 
     """
     Transcribes audio via whisper
@@ -347,6 +356,11 @@ def transcribe_audio(model: Any, model_name, WAVE_OUTPUT_FILENAME: str, RATE: in
     detected_language = max(probs, key=probs.get)
 
     if 'en' not in detected_language and ('turbo' not in model_name and 'large' not in model_name):
+        try:
+            os.remove(WAVE_OUTPUT_FILENAME)
+        except Exception as e:
+            print("Error:", e)
+            user_voice_output = ""
         return ""
 
     options = whisper.DecodingOptions(
@@ -360,8 +374,15 @@ def transcribe_audio(model: Any, model_name, WAVE_OUTPUT_FILENAME: str, RATE: in
 
     result = whisper.decode(model, mel, options)
     print("[NO SPEECH PROBABILITY]:", result.no_speech_prob)
-    if result.no_speech_prob > probability_threshold:
+    print("[PROBABILITY THRESHOLD]:", probability_threshold)
+    #print("[AUDIO RESULT]: ", result)
+    if result.no_speech_prob > probability_threshold: #or result.compression_ratio < 0.80:
+        print("[THRESHOLD EXCEEDED, NO VOICE OUTPUT.]")
         user_voice_output = ""
+        try:
+            os.remove(WAVE_OUTPUT_FILENAME)
+        except Exception as e:
+            print("Error:", e)
         return user_voice_output
         
     user_voice_output_raw = result.text
@@ -373,7 +394,6 @@ def transcribe_audio(model: Any, model_name, WAVE_OUTPUT_FILENAME: str, RATE: in
     except Exception as e:
         print("Error:", e)
         user_voice_output = ""
-        return user_voice_output
     
     # Print the recognized text
     return user_voice_output

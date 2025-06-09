@@ -34,7 +34,7 @@ def clean_text(text):
     text = text.replace('\\n', '')
     return text.strip()
 
-async def synthesize_sentence(tts, sentence, speaker_wav, sample_rate):
+async def synthesize_sentence(tts, sentence, speaker_wav, sample_rate, voice_speed=1.0):
     """
     Asynchronously synthesizes a sentence and returns the audio data.
     """
@@ -46,7 +46,7 @@ async def synthesize_sentence(tts, sentence, speaker_wav, sample_rate):
         loop = asyncio.get_event_loop()
         # Synthesize the sentence using GPU
         audio = await loop.run_in_executor(
-            None, lambda: tts.tts(text=sentence, speaker_wav=speaker_wav, language="en")
+            None, lambda: tts.tts(text=sentence, speaker_wav=speaker_wav, language="en", speed=voice_speed)
         )
         return audio
     except Exception as e:
